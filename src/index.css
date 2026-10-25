@@ -1,0 +1,82 @@
+@import 'tailwindcss';
+
+/* 深色模式通过 html.dark 类切换（跟随早晚时间，见 useTheme） */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    @apply overflow-x-hidden bg-slate-100 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100;
+  }
+
+  input[type='datetime-local'],
+  input[type='number'] {
+    min-width: 0;
+  }
+}
+
+/* 底部 Tab 栏占位：内容不被固定栏和 iPhone 小黑条挡住 */
+.pb-tabbar {
+  padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+}
+
+/* Toast 浮在 Tab 栏上方（避免压住中间悬浮按钮） */
+.bottom-above-tabbar {
+  bottom: calc(7rem + env(safe-area-inset-bottom));
+}
+
+/* 顶部刘海安全区域 */
+.pt-page {
+  padding-top: calc(1.25rem + env(safe-area-inset-top));
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes toast-in {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.sheet-enter {
+  animation: sheet-up 0.22s ease-out;
+}
+
+.toast-enter {
+  animation: toast-in 0.18s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet-enter,
+  .toast-enter {
+    animation: none;
+  }
+}

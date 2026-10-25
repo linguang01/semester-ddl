@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#0f172a" />
+    <script>
+      // 首屏渲染前切换深浅色，避免深色模式下白屏闪烁。与 src/hooks/useTheme.ts 保持一致。
+      (function () {
+        var hour = new Date().getHours();
+        var dark = hour >= 18 || hour < 6;
+        try {
+          var pref = localStorage.getItem('ddl-theme');
+          if (pref === 'dark') dark = true;
+          else if (pref === 'light') dark = false;
+        } catch (e) {
+          /* localStorage 不可用时按时间自动 */
+        }
+        document.documentElement.classList.toggle('dark', dark);
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute('content', dark ? '#0f172a' : '#f1f5f9');
+      })();
+    </script>
+    <meta name="description" content="学期 DDL 与今日三件事，本地优先，数据保存在浏览器 IndexedDB。" />
+
+    <!-- iOS 添加到主屏幕 -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="DDL" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    <title>学期 DDL · 今日三件事</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
