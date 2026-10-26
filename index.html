@@ -24,6 +24,53 @@
         if (meta) meta.setAttribute('content', dark ? '#0f172a' : '#f1f5f9');
       })();
     </script>
+    <script>
+      // PWA 缓存救援：检测到旧版 Service Worker 时，注销并清空缓存，强制加载新资源。
+      // 仅在版本标记变化时执行一次，避免每次打开都清缓存（那会禁用离线能力）。
+      (function () {
+        var MIGRATE_KEY = 'ddl-sw-migrate';
+        var MIGRATE_VERSION = 'v2'; // 需要再次强制清理时，递增此版本号即可
+
+        try {
+          if (localStorage.getItem(MIGRATE_KEY) === MIGRATE_VERSION) return;
+        } catch (e) {
+          return; // localStorage 不可用则跳过，交给正常 SW 更新逻辑
+        }
+
+        if (!('serviceWorker' in navigator)) {
+          // 不支持 SW 的环境，直接打标，避免下次再走清理逻辑
+          try { localStorage.setItem(MIGRATE_KEY, MIGRATE_VERSION); } catch (e) {}
+          return;
+        }
+
+        navigator.serviceWorker.getRegistrations().then(function (registrations) {
+          if (registrations.length === 0) {
+            // 没有任何 SW 注册（新用户），无需清理，直接打标
+            try { localStorage.setItem(MIGRATE_KEY, MIGRATE_VERSION); } catch (e) {}
+            return;
+          }
+
+          // 有旧 SW：逐个注销，再清空所有 Cache Storage
+          return Promise.all(registrations.map(function (reg) {
+            return reg.unregister();
+          })).then(function () {
+            if (window.caches && window.caches.keys) {
+              return window.caches.keys().then(function (keys) {
+                return Promise.all(keys.map(function (key) {
+                  return window.caches.delete(key);
+                }));
+              });
+            }
+          }).then(function () {
+            try { localStorage.setItem(MIGRATE_KEY, MIGRATE_VERSION); } catch (e) {}
+            // 清理完成后刷新一次，加载新资源
+            window.location.reload();
+          });
+        }).catch(function () {
+          // 清理失败也不阻塞页面渲染，下次打开会重试
+        });
+      })();
+    </script>
     <meta name="description" content="学期 DDL 与今日三件事，本地优先，数据保存在浏览器 IndexedDB。" />
 
     <!-- iOS 添加到主屏幕 -->

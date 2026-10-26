@@ -9,8 +9,8 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      // 检测到新版本时不自动刷新，交由前端 useRegisterSW 弹 Toast，用户点击后再刷新
-      registerType: 'prompt',
+      // 自动更新：新 SW 安装后立即 skipWaiting 接管，避免手机端卡旧版本
+      registerType: 'autoUpdate',
       manifest: {
         name: 'DDL 三件事',
         short_name: 'DDL',
@@ -45,6 +45,10 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,jpg,jpeg}'],
         cleanupOutdatedCaches: true,
         navigateFallback: '/index.html',
+        // 新 SW 安装后立即跳过等待并接管所有页面
+        // （autoUpdate 下插件会自动设置这两项，这里显式声明更保险）
+        skipWaiting: true,
+        clientsClaim: true,
       },
       devOptions: {
         enabled: false,
