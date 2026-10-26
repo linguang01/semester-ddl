@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import dayjs from 'dayjs';
 import type { NewTaskInput, Task, TaskPriority, TaskType, TaskUpdate } from '../types';
 import { PRIORITY_LABEL, TASK_PRIORITIES, TASK_TYPES, TYPE_LABEL } from '../utils/taskDisplay';
+import { ConfirmDialog } from './ConfirmDialog';
 import type { Notify } from './Toast';
 import { XIcon } from './icons';
 
@@ -47,6 +48,7 @@ export function TaskFormSheet({
   const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? 'medium');
   const [errors, setErrors] = useState<FormErrors>({});
   const [submitting, setSubmitting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const submitLock = useRef(false);
 
@@ -127,9 +129,14 @@ export function TaskFormSheet({
     }
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (!task || submitLock.current) return;
-    if (!window.confirm(`确定删除「${task.title}」吗？删除后无法恢复。`)) return;
+    setConfirmDelete(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!task) return;
+    setConfirmDelete(false);
 
     submitLock.current = true;
     setSubmitting(true);
@@ -326,6 +333,18 @@ export function TaskFormSheet({
           )}
         </form>
       </div>
+
+      {confirmDelete && task && (
+        <ConfirmDialog
+          title="删除事项"
+          message={`确定删除「${task.title}」吗？删除后无法恢复。`}
+          confirmText="删除"
+          cancelText="取消"
+          tone="danger"
+          onConfirm={() => void handleConfirmDelete()}
+          onCancel={() => setConfirmDelete(false)}
+        />
+      )}
     </div>
   );
 }

@@ -1,10 +1,12 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import dayjs from 'dayjs';
 import { AllTasksView } from './components/AllTasksView';
 import { BottomNav, type TabKey } from './components/BottomNav';
 import { EmptyState } from './components/EmptyState';
 import { SettingsSheet } from './components/SettingsSheet';
 import { TaskFormSheet } from './components/TaskFormSheet';
+import { ConfirmDialog } from './components/ConfirmDialog';
+import { FocusOverlay } from './components/FocusOverlay';
 import { TodayView } from './components/TodayView';
 import { Toast, type Notify, type ToastMessage } from './components/Toast';
 import { SettingsIcon } from './components/icons';
@@ -13,10 +15,17 @@ import {
   MAX_DAILY_TASKS,
   useDailySelection,
 } from './hooks/useDailySelection';
+import { useFocusTimer } from './hooks/useFocusTimer';
 import { useInstallPrompt } from './hooks/useInstallPrompt';
 import { useTasks } from './hooks/useTasks';
 import { useTheme } from './hooks/useTheme';
+import { autoSelectTasks } from './utils/autoSelect';
 import { todayKey } from './utils/date';
+import {
+  playFocusCompleteSound,
+  requestNotificationPermission,
+  sendFocusCompleteNotification,
+} from './utils/focusAlert';
 import type { NewTaskInput, Task, TaskUpdate } from './types';
 
 type SheetState = { mode: 'create' } | { mode: 'edit'; task: Task } | null;
@@ -38,7 +47,7 @@ export default function App() {
     toggleTaskDone,
   } = useTasks();
 
-  const { taskIds, addToSelection, removeFromSelection } = useDailySelection(today);
+  const { taskIds, addToSelection, removeFromSelection, replaceSelection } = useDailySelection(today);
 
   // 常驻监听 beforeinstallprompt，避免设置面板打开太晚而错过事件
   const install = useInstallPrompt();
@@ -50,6 +59,16 @@ export default function App() {
   const [sheet, setSheet] = useState<SheetState>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [confirmState, setConfirmState] = useState<{
+    message: string;
+    onConfirm: () => void;
+  } | null>(null);
+
+  // 专注倒计时：状态放在 App 层，切到「全部事项」tab 也不会中断专注
+  const focus = useFocusTimer();
+  const focusTask = focus.focusTaskId
+    ? tasks.find((task) => task.id === focus.focusTaskId)
+    : undefined;
 
   const notify: Notify = useCallback((message, tone = 'info') => {
     setToast({ id: Date.now(), message, tone });
@@ -132,6 +151,62 @@ export default function App() {
     [today, removeFromSelection, notify],
   );
 
+  // 开始专注：预先请求通知权限，再启动计时
+  const handleStartFocus = useCallback(
+    (task: Task) => {
+      requestNotificationPermission();
+      focus.start(task.id);
+    },
+    [focus.start],
+  );
+
+  // 专注结束时的副作用：提示音 + 系统通知（FocusOverlay 内同时展示结束画面）
+  useEffect(() => {
+    if (focus.status === 'finished') {
+      playFocusCompleteSound();
+      sendFocusCompleteNotification();
+    }
+  }, [focus.status]);
+
+  const handleAutoSelect = useCallback(() => {
+    // 纯函数筛选：最多返回 MAX_DAILY_TASKS 个 id（不足则全选）
+    const candidates = autoSelectTasks(tasks, MAX_DAILY_TASKS);
+
+    if (candidates.length === 0) {
+      notify('没有可自动选择的待办', 'info');
+      return;
+    }
+
+    // 真正写入：覆盖当天选择
+    const apply = async () => {
+      try {
+        await replaceSelection(today, candidates);
+        notify(
+          candidates.length < MAX_DAILY_TASKS
+            ? `已自动选择 ${candidates.length} 件（待办不足 3 件，已全选）`
+            : '已自动选择今日三件事',
+          'success',
+        );
+      } catch (cause) {
+        notify(describeError(cause), 'error');
+      }
+    };
+
+    // 今天已选过 → 弹 App 内确认框（替换原生 window.confirm）
+    if (taskIds.length > 0) {
+      setConfirmState({
+        message: '是否覆盖当前今日选择？',
+        onConfirm: () => {
+          setConfirmState(null);
+          void apply();
+        },
+      });
+      return;
+    }
+
+    void apply();
+  }, [tasks, taskIds.length, today, replaceSelection, notify]);
+
   return (
     <>
       <div className="mx-auto min-h-screen w-full max-w-md pb-tabbar">
@@ -185,6 +260,8 @@ export default function App() {
               taskIds={taskIds}
               onAdd={handleAddToToday}
               onRemove={handleRemoveFromToday}
+              onAutoSelect={handleAutoSelect}
+              onStartFocus={handleStartFocus}
             />
           )}
         </div>
@@ -209,6 +286,29 @@ export default function App() {
           theme={theme}
           notify={notify}
           onClose={() => setSettingsOpen(false)}
+        />
+      )}
+
+      {focus.focusTaskId && focusTask && (
+        <FocusOverlay
+          taskTitle={focusTask.title}
+          status={focus.status}
+          remainingSeconds={focus.remainingSeconds}
+          onPause={focus.pause}
+          onResume={focus.resume}
+          onStop={focus.stop}
+        />
+      )}
+
+      {confirmState && (
+        <ConfirmDialog
+          title="覆盖今日选择"
+          message={confirmState.message}
+          confirmText="覆盖"
+          cancelText="取消"
+          tone="danger"
+          onConfirm={confirmState.onConfirm}
+          onCancel={() => setConfirmState(null)}
         />
       )}
 

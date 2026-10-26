@@ -9,7 +9,9 @@ import {
   mergeBackup,
   readBackupFile,
   type ImportReport,
+  type ParsedBackup,
 } from '../utils/backup';
+import { ConfirmDialog } from './ConfirmDialog';
 import { InstallPrompt } from './InstallPrompt';
 import type { Notify } from './Toast';
 import { XIcon } from './icons';
@@ -31,6 +33,7 @@ export function SettingsSheet({ install, theme, notify, onClose }: SettingsSheet
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [report, setReport] = useState<ImportReport | null>(null);
+  const [pendingBackup, setPendingBackup] = useState<ParsedBackup | null>(null);
 
   useEffect(() => {
     const previous = document.body.style.overflow;
@@ -75,15 +78,25 @@ export function SettingsSheet({ install, theme, notify, onClose }: SettingsSheet
 
     try {
       const parsed = await readBackupFile(file);
-
-      const confirmed = window.confirm(
-        `将合并导入 ${parsed.tasks.length} 条任务和 ${parsed.dailySelections.length} 条今日选择，现有数据不会被删除。继续？`,
+      // 解析成功后先弹确认框，确认后再真正写入
+      setPendingBackup(parsed);
+    } catch (error) {
+      notify(
+        error instanceof BackupError ? error.message : '导入失败，现有数据未受影响',
+        'error',
       );
-      if (!confirmed) {
-        notify('已取消导入', 'info');
-        return;
-      }
+    } finally {
+      setImporting(false);
+    }
+  };
 
+  const handleConfirmImport = async () => {
+    if (!pendingBackup) return;
+    const parsed = pendingBackup;
+    setPendingBackup(null);
+    setImporting(true);
+
+    try {
       // 真正写入前，先下载一份当前数据，便于回退
       await downloadPreImportBackup();
 
@@ -230,6 +243,20 @@ export function SettingsSheet({ install, theme, notify, onClose }: SettingsSheet
           </p>
         </section>
       </div>
+
+      {pendingBackup && (
+        <ConfirmDialog
+          title="确认导入"
+          message={`将合并导入 ${pendingBackup.tasks.length} 条任务和 ${pendingBackup.dailySelections.length} 条今日选择，现有数据不会被删除。继续？`}
+          confirmText="继续导入"
+          cancelText="取消"
+          onConfirm={() => void handleConfirmImport()}
+          onCancel={() => {
+            setPendingBackup(null);
+            notify('已取消导入', 'info');
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -71,3 +71,52 @@ export function CalendarIcon({ className = 'h-5 w-5' }: IconProps) {
     </svg>
   );
 }
+
+export function WandIcon({ className = 'h-5 w-5' }: IconProps) {
+  return (
+    <svg {...iconProps} className={className}>
+      {/* 魔法棒：斜向的棒身 + 顶端圆点 */}
+      <path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72Z" />
+      <path d="m14 7 3 3" />
+      {/* 四散的小星星 */}
+      <path d="M5 6v4" />
+      <path d="M19 14v4" />
+      <path d="M10 2v2" />
+      <path d="M7 8H3" />
+      <path d="M21 16h-4" />
+      <path d="M11 3H9" />
+    </svg>
+  );
+}
+
+export function PlayIcon({ className = 'h-5 w-5' }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden={true} className={className}>
+      <path d="M8 5.14v13.72c0 .79.87 1.27 1.54.84l10.2-6.86a1 1 0 0 0 0-1.68L9.54 4.3A1 1 0 0 0 8 5.14Z" />
+    </svg>
+  );
+}
+
+export function PauseIcon({ className = 'h-5 w-5' }: IconProps) {
+  return (
+    <svg {...iconProps} className={className}>
+      <path d="M9 5v14M15 5v14" />
+    </svg>
+  );
+}
+
+export function StopIcon({ className = 'h-5 w-5' }: IconProps) {
+  return (
+    <svg {...iconProps} className={className}>
+      <rect x="6" y="6" width="12" height="12" rx="2" />
+    </svg>
+  );
+}
+
+export function StarIcon({ className = 'h-5 w-5' }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden={true} className={className}>
+      <path d="M12 2.5l2.9 5.88 6.49.94-4.7 4.58 1.11 6.47L12 17.9l-5.8 3.05 1.11-6.47-4.7-4.58 6.49-.94L12 2.5z" />
+    </svg>
+  );
+}

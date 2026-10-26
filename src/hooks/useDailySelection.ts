@@ -37,6 +37,8 @@ export interface UseDailySelectionResult {
   addToSelection: (date: string, taskId: string) => Promise<DailySelection>;
   removeFromSelection: (date: string, taskId: string) => Promise<void>;
   clearSelection: (date: string) => Promise<void>;
+  /** 一键生成：用给定 id 列表整体覆盖某天的选择（去重、截断、过滤已删除/已完成） */
+  replaceSelection: (date: string, taskIds: string[]) => Promise<void>;
 }
 
 function assertDateKey(date: string): void {
@@ -121,6 +123,30 @@ export function useDailySelection(activeDate: string): UseDailySelectionResult {
     await db.dailySelections.delete(date);
   }, []);
 
+  const replaceSelection = useCallback(async (date: string, taskIds: string[]): Promise<void> => {
+    assertDateKey(date);
+
+    // 去重并截断到每日上限，防止调用方传入重复或超量 id
+    const ids = [...new Set(taskIds)].slice(0, MAX_DAILY_TASKS);
+
+    await db.transaction('rw', db.tasks, db.dailySelections, async () => {
+      // 防御：候选任务可能已被删除或标记完成，写库前再校验一遍，静默剔除无效项
+      const fetched = await db.tasks.bulkGet(ids);
+      const validIds = ids.filter((_id, index) => {
+        const task = fetched[index];
+        return task !== undefined && task.status === 'todo';
+      });
+
+      // 全部无效则清空当天选择
+      if (validIds.length === 0) {
+        await db.dailySelections.delete(date);
+        return;
+      }
+
+      await db.dailySelections.put({ date, taskIds: validIds });
+    });
+  }, []);
+
   return {
     date: activeDate,
     selection,
@@ -132,5 +158,6 @@ export function useDailySelection(activeDate: string): UseDailySelectionResult {
     addToSelection,
     removeFromSelection,
     clearSelection,
+    replaceSelection,
   };
 }
