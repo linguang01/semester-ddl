@@ -9,8 +9,8 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      // 新版本在用户下次打开时自动生效，不弹更新确认
-      registerType: 'autoUpdate',
+      // 检测到新版本时不自动刷新，交由前端 useRegisterSW 弹 Toast，用户点击后再刷新
+      registerType: 'prompt',
       manifest: {
         name: 'DDL 三件事',
         short_name: 'DDL',
