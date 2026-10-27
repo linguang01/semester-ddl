@@ -91,6 +91,11 @@ export function initPwa() {
 
       // 网络恢复时检查：离线打开应用、联网后立即追上最新版
       window.addEventListener('online', () => void runUpdateCheck());
+
+      // iOS 从缓存恢复页面（bfcache）时不触发 visibilitychange，用 pageshow 补一次检查
+      window.addEventListener('pageshow', (event) => {
+        if (event.persisted) void runUpdateCheck();
+      });
     },
     onRegisterError(error) {
       console.warn('Service Worker 注册失败（不影响应用使用）', error);

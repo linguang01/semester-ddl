@@ -21,36 +21,42 @@ npm run preview
 - `npm run build`：类型检查 + 构建，产物输出到 `dist/`（包含 `manifest.webmanifest`、`sw.js` 和 PWA 图标；SW 注册与更新检查逻辑打包进主 JS，由 `src/pwa.ts` 接管）。
 - `npm run preview`：本地预览构建产物，默认 `http://localhost:4173`。
 
-## 部署到 Vercel（GitHub 方式）
+## 部署：用一个固定、国内可访问的 HTTPS 地址
 
-### 第一步：把代码推到 GitHub（仅第一次需要）
+**先记住三条铁律（都是踩过的坑）：**
 
-```bash
-git init
-git add .
-git commit -m "first commit"
-git branch -M main
-gh repo create semester-ddl --public --source=. --push
-```
+1. **装到主屏幕的应用绑定域名**。用带鉴权参数的 24 小时预览链接（EdgeOne 的 `*.edgeone.dev/?eo_time=…`）安装，链接过期后应用直接 401 打不开，只能重装——这是之前「得重新搭建」的真正原因。
+2. **Vercel 默认域名（`*.vercel.app`）大陆无法直连**（`ERR_CONNECTION_TIMED_OUT`），国内使用不要选它；它只适合海外访问场景。
+3. **必须 HTTPS**：Service Worker 和 PWA 安装只在 HTTPS（或 localhost）下生效。
 
-（没有 `gh` 的话，在 github.com 新建空仓库，然后执行 `git remote add origin <仓库地址>` 和 `git push -u origin main`。）
+### 推荐：EdgeOne Pages（腾讯云，免费，国内可达，push 自动部署）
 
-### 第二步：在 Vercel 导入仓库
+1. 把代码推到 GitHub（同下文 Vercel 流程的第一步）。
+2. 登录 [腾讯云 EdgeOne Pages 控制台](https://console.cloud.tencent.com/edgeone/pages)，**创建项目 → 导入 Git 仓库**，构建配置：Build Command `npm run build`，输出目录 `dist`。
+3. 部署完成后，进入**部署详情**，找到 Production 部署的**默认域名**（形如 `https://xxx.edgeone.app`，免费、固定、无需备案）。
+4. **以后手机上只用这个固定域名**。`main` 分支每次 push 会自动重新部署，应用在手机上自动更新。
 
-1. 用 GitHub 账号登录 [vercel.com](https://vercel.com)。
-2. 点 **Add New… → Project**，在列表里选择刚推送的仓库，点 **Import**。
-3. 部署配置：
-   - **Framework Preset**：`Vite`
-   - **Build Command**：`npm run build`
-   - **Output Directory**：`dist`
-   - 其余保持默认
-4. 点 **Deploy**，等构建完成，Vercel 会给一个 `https://xxx.vercel.app` 地址。
+> 注意区分两种地址：部署详情/PR 里的「预览地址」是 24 小时临时链接，只能自己临时看看，**不能用来装 PWA**；生产部署的默认域名才是固定地址。
+>
+> 想要大陆极速访问和自有品牌域名才需要买域名（EdgeOne 免费版走海外可用区节点，大陆访问一般可用，速度中等）。
 
-> **手机上验收必须用这个 HTTPS 地址打开，不要用局域网 IP（192.168.x.x）。** PWA 安装和 Service Worker 只在 HTTPS（或 localhost）下生效。
+### 备选：Vercel（仅海外访问场景）
+
+1. 代码推到 GitHub 后，在 [vercel.com](https://vercel.com) 点 **Add New… → Project → Import**。
+2. 配置：Framework Preset `Vite`，Build Command `npm run build`，Output Directory `dist`。
+3. 得到 `https://xxx.vercel.app` 地址。
+
+> 大陆网络直连 `*.vercel.app` 会超时，属平台限制而非应用问题。
 
 ## 手机使用：安装到主屏幕
 
-**前提：必须通过 HTTPS 地址访问**（例如 Vercel 的 `https://xxx.vercel.app`）。用局域网 IP 的 HTTP 地址打开时，安装提示不会出现，这是浏览器安全限制，属预期行为。
+**前提：必须用上面说的「固定生产域名」打开**（HTTPS）。局域网 IP、24 小时预览链接都不行。
+
+**之前从预览链接/Vercel 装过的，做一次迁移（只需一次）：**
+
+1. 删掉手机主屏幕上的旧图标；
+2. 用固定生产域名在浏览器打开应用，重新「添加到主屏幕」；
+3. 打开「设置 → 版本与更新」核对版本号和构建时间——以后就不用再管了。
 
 安装完成后从主屏幕图标打开：应用会以独立窗口（standalone）运行，没有浏览器地址栏，支持离线打开。
 
@@ -61,10 +67,10 @@ gh repo create semester-ddl --public --source=. --push
 
 部署新版本后，手机上的应用会自动更新，**不需要重新安装、不需要清数据**：
 
-- **应用打开、从后台切回前台、网络恢复**时，都会主动检查 `sw.js` 是否有新版本（不再只依赖浏览器「打开页面才检查」的被动机制）；
+- **应用打开、从后台切回前台、网络恢复、iOS 从缓存恢复页面**时，都会主动检查 `sw.js` 是否有新版本（不再只依赖浏览器「打开页面才检查」的被动机制）；
 - **页面一直开着**时，每小时也会自动检查一次；
 - 发现新版本后自动下载并**自动刷新**（正在操作时会等切到后台再刷新，最多延迟 2 分钟，避免打断输入）；
-- 也可以在「设置 → 版本与更新」里点「**检查更新**」立即检查，并核对当前版本号、git 短哈希和构建时间——用来确认手机上跑的就是最新构建。
+- 也可以在「设置 → 版本与更新」里点「**检查更新**」立即检查；那里同时显示**当前版本号、git 短哈希、构建时间和当前访问地址**。如果地址显示的是 `edgeone.dev` 或 `vercel.app`，面板会直接警告你：这个地址装的应用没法长期用，请迁移到固定生产域名。
 
 配套的缓存策略已写进部署配置（`vercel.json` / `edgeone.json`）：
 
@@ -77,7 +83,7 @@ gh repo create semester-ddl --public --source=. --push
 
 **两个前提，缺一不可**：
 
-1. **访问地址必须固定**：装到主屏幕的应用绑定部署域名。如果每次部署用临时预览链接或更换域名，旧安装的应用不会更新，只能重新安装。请用固定域名（Vercel 项目域名或 EdgeOne 正式项目 + 自定义域名）。
+1. **访问地址必须固定**：装到主屏幕的应用绑定部署域名。用 24 小时预览链接（`*.edgeone.dev`）安装的应用，链接过期后直接 401，任何自动更新机制都救不了，只能从固定生产域名重装一次。
 2. **必须 HTTPS**：Service Worker 只在 HTTPS（或 localhost）下生效。
 
 ## 外观：深浅色自动切换

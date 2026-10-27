@@ -39,6 +39,11 @@ const UPDATE_RESULT_TOAST: Record<UpdateCheckResult, { message: string; tone: To
   error: { message: '检查更新失败，请稍后重试', tone: 'error' },
 };
 
+// 已知的「不可靠地址」：EdgeOne 24 小时预览链接（过期 401）、Vercel 默认域名（大陆无法直连）
+const SITE_ORIGIN = window.location.origin;
+const TEMP_HOSTNAME_PATTERN = /(^|\.)edgeone\.dev$|(^|\.)vercel\.app$/i;
+const IS_TEMP_ORIGIN = TEMP_HOSTNAME_PATTERN.test(new URL(SITE_ORIGIN).hostname);
+
 export function SettingsSheet({ install, theme, notify, onClose }: SettingsSheetProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [exporting, setExporting] = useState(false);
@@ -293,6 +298,14 @@ export function SettingsSheet({ install, theme, notify, onClose }: SettingsSheet
           <p className="mt-1.5 text-[11px] leading-relaxed text-slate-400 dark:text-slate-500">
             应用会在打开、切回前台、网络恢复时自动检查更新，页面开着时每小时也会检查一次；发现新版本会自动刷新。
           </p>
+          <p className="mt-1.5 break-all text-[11px] leading-relaxed text-slate-400 dark:text-slate-500">
+            当前访问地址：{SITE_ORIGIN}
+          </p>
+          {IS_TEMP_ORIGIN && (
+            <p className="mt-1.5 rounded-lg bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+              当前是临时预览地址（24 小时后失效）或国内无法稳定直连的地址，装在主屏幕的应用会随之失效。请改用部署平台的固定生产域名打开，并重新「添加到主屏幕」一次。
+            </p>
+          )}
 
           <button
             type="button"
