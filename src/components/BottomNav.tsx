@@ -16,7 +16,7 @@ export function BottomNav({ active, onChange, onCreate }: BottomNavProps) {
     >
       <div
         className="mx-auto grid max-w-md grid-cols-3"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 20px)' }}
       >
         <button
           type="button"

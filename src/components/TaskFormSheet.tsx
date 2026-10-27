@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import dayjs from 'dayjs';
 import type { NewTaskInput, Task, TaskPriority, TaskType, TaskUpdate } from '../types';
 import { PRIORITY_LABEL, TASK_PRIORITIES, TASK_TYPES, TYPE_LABEL } from '../utils/taskDisplay';
+import { parseQuickAdd } from '../utils/parseQuickAdd';
 import { ConfirmDialog } from './ConfirmDialog';
 import type { Notify } from './Toast';
 import { XIcon } from './icons';
@@ -42,7 +43,8 @@ export function TaskFormSheet({
   const [deadline, setDeadline] = useState(
     task
       ? dayjs(task.deadline).format('YYYY-MM-DDTHH:mm')
-      : dayjs().add(1, 'day').hour(23).minute(59).second(0).format('YYYY-MM-DDTHH:mm'),
+      // 新增任务默认「今天 23:59」，与快速解析「未识别到时间就默认今天」保持一致
+      : dayjs().hour(23).minute(59).second(0).format('YYYY-MM-DDTHH:mm'),
   );
   const [hours, setHours] = useState(task ? String(task.estimatedHours) : '1');
   const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? 'medium');
@@ -76,13 +78,35 @@ export function TaskFormSheet({
   const deadlineIsPast = parsedDeadline.isValid() && !parsedDeadline.isAfter(dayjs());
   const showHistoricalHint = isEditingDone && deadlineIsPast && !errors.deadline;
 
+  // 标题输入：新增任务时做自然语言解析
+  const handleTitleChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value;
+    setTitle(value);
+    // 仅新增任务启用快速解析；编辑时保持标题与时间独立，避免误改已有 DDL
+    if (isEditing) return;
+    const result = parseQuickAdd(value);
+    // 只有真正识别到日期/时间才回填截止时间，否则保留用户手动选择或默认值
+    if (result.hasDate || result.hasTime) {
+      setDeadline(result.deadline.format('YYYY-MM-DDTHH:mm'));
+    }
+  };
+
+  // 标题失焦：剥离日期/时间片段，把干净的任务名回填到标题框
+  const handleTitleBlur = () => {
+    if (isEditing) return;
+    setTitle(parseQuickAdd(title).title);
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (submitLock.current) return;
 
+    // 新增任务：提交前再解析一次，兜底剥离标题里残留的日期/时间片段
+    const finalTitle = isEditing ? title.trim() : parseQuickAdd(title).title;
+
     const nextErrors: FormErrors = {};
 
-    if (!title.trim()) {
+    if (!finalTitle) {
       nextErrors.title = '标题不能为空';
     }
 
@@ -105,7 +129,7 @@ export function TaskFormSheet({
 
     try {
       const payload: NewTaskInput = {
-        title: title.trim(),
+        title: finalTitle,
         type,
         course: course.trim(),
         deadline: parsedDeadline.toISOString(),
@@ -170,7 +194,7 @@ export function TaskFormSheet({
         aria-modal="true"
         aria-labelledby="task-form-title"
         className="sheet-enter relative max-h-[92dvh] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-2xl bg-white px-4 pt-3 shadow-2xl dark:bg-slate-900"
-        style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}
+        style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 20px))' }}
       >
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-slate-200 dark:bg-slate-700" />
 
@@ -197,10 +221,11 @@ export function TaskFormSheet({
             <input
               id="task-title"
               value={title}
-              onChange={(event) => setTitle(event.target.value)}
+              onChange={handleTitleChange}
+              onBlur={handleTitleBlur}
               maxLength={80}
               autoFocus={!isEditing}
-              placeholder="例如：高数作业第 5 章"
+              placeholder="例如：明天下午3点交高数作业"
               className={INPUT_CLASS}
             />
           </label>

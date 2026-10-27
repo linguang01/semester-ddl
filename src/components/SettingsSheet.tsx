@@ -11,6 +11,7 @@ import {
   type ImportReport,
   type ParsedBackup,
 } from '../utils/backup';
+import { exportTasksToCalendar } from '../utils/calendar';
 import { ConfirmDialog } from './ConfirmDialog';
 import { InstallPrompt } from './InstallPrompt';
 import type { Notify } from './Toast';
@@ -32,6 +33,7 @@ export function SettingsSheet({ install, theme, notify, onClose }: SettingsSheet
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [calendarExporting, setCalendarExporting] = useState(false);
   const [report, setReport] = useState<ImportReport | null>(null);
   const [pendingBackup, setPendingBackup] = useState<ParsedBackup | null>(null);
 
@@ -115,6 +117,20 @@ export function SettingsSheet({ install, theme, notify, onClose }: SettingsSheet
     }
   };
 
+  const handleExportCalendar = async () => {
+    if (exporting || importing || calendarExporting) return;
+
+    setCalendarExporting(true);
+    try {
+      const count = await exportTasksToCalendar();
+      notify(`已生成 ${count} 条日历提醒，请在弹出面板中确认添加`, 'success');
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '导出失败，请稍后重试', 'error');
+    } finally {
+      setCalendarExporting(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center">
       <div
@@ -128,7 +144,7 @@ export function SettingsSheet({ install, theme, notify, onClose }: SettingsSheet
         aria-modal="true"
         aria-labelledby="settings-title"
         className="sheet-enter relative max-h-[92dvh] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-2xl bg-white px-4 pt-3 shadow-2xl dark:bg-slate-900"
-        style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}
+        style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 20px))' }}
       >
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-slate-200 dark:bg-slate-700" />
 
@@ -190,7 +206,7 @@ export function SettingsSheet({ install, theme, notify, onClose }: SettingsSheet
             <button
               type="button"
               onClick={() => void handleExport()}
-              disabled={exporting || importing}
+              disabled={exporting || importing || calendarExporting}
               className={ACTION_BUTTON_CLASS}
             >
               {exporting ? '导出中…' : '导出备份'}
@@ -199,12 +215,24 @@ export function SettingsSheet({ install, theme, notify, onClose }: SettingsSheet
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              disabled={exporting || importing}
+              disabled={exporting || importing || calendarExporting}
               className={ACTION_BUTTON_CLASS}
             >
               {importing ? '导入中…' : '导入备份'}
             </button>
           </div>
+
+          <button
+            type="button"
+            onClick={() => void handleExportCalendar()}
+            disabled={exporting || importing || calendarExporting}
+            className={`${ACTION_BUTTON_CLASS} mt-2 w-full`}
+          >
+            {calendarExporting ? '生成中…' : '导出到系统日历'}
+          </button>
+          <p className="mt-1.5 text-[11px] leading-relaxed text-slate-400 dark:text-slate-500">
+            导入系统日历后，手机日历会自动提醒你
+          </p>
 
           <input
             ref={fileInputRef}

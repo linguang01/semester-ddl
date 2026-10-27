@@ -31,17 +31,17 @@
 
 /* 底部 Tab 栏占位：内容不被固定栏和 iPhone 小黑条挡住 */
 .pb-tabbar {
-  padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+  padding-bottom: calc(6rem + env(safe-area-inset-bottom, 20px));
 }
 
 /* Toast 浮在 Tab 栏上方（避免压住中间悬浮按钮） */
 .bottom-above-tabbar {
-  bottom: calc(7rem + env(safe-area-inset-bottom));
+  bottom: calc(7rem + env(safe-area-inset-bottom, 20px));
 }
 
 /* 顶部刘海安全区域 */
 .pt-page {
-  padding-top: calc(1.25rem + env(safe-area-inset-top));
+  padding-top: calc(1.25rem + env(safe-area-inset-top, 0px));
 }
 
 @keyframes sheet-up {
