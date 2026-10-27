@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#0f172a" />
+    <script>
+      // 首屏渲染前切换深浅色，避免深色模式下白屏闪烁。与 src/hooks/useTheme.ts 保持一致。
+      (function () {
+        var hour = new Date().getHours();
+        var dark = hour >= 18 || hour < 6;
+        try {
+          var pref = localStorage.getItem('ddl-theme');
+          if (pref === 'dark') dark = true;
+          else if (pref === 'light') dark = false;
+        } catch (e) {
+          /* localStorage 不可用时按时间自动 */
+        }
+        document.documentElement.classList.toggle('dark', dark);
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute('content', dark ? '#0f172a' : '#f1f5f9');
+      })();
+    </script>
+    <script>
+      // PWA 缓存救援：检测到旧版 Service Worker 时，注销并清空缓存，强制加载新资源。
+      // 仅在版本标记变化时执行一次，避免每次打开都清缓存（那会禁用离线能力）。
+      (function () {
+        var MIGRATE_KEY = 'ddl-sw-migrate';
+        var MIGRATE_VERSION = 'v2'; // 需要再次强制清理时，递增此版本号即可
+
+        try {
+          if (localStorage.getItem(MIGRATE_KEY) === MIGRATE_VERSION) return;
+        } catch (e) {
+          return; // localStorage 不可用则跳过，交给正常 SW 更新逻辑
+        }
+
+        if (!('serviceWorker' in navigator)) {
+          // 不支持 SW 的环境，直接打标，避免下次再走清理逻辑
+          try { localStorage.setItem(MIGRATE_KEY, MIGRATE_VERSION); } catch (e) {}
+          return;
+        }
+
+        navigator.serviceWorker.getRegistrations().then(function (registrations) {
+          if (registrations.length === 0) {
+            // 没有任何 SW 注册（新用户），无需清理，直接打标
+            try { localStorage.setItem(MIGRATE_KEY, MIGRATE_VERSION); } catch (e) {}
+            return;
+          }
+
+          // 有旧 SW：逐个注销，再清空所有 Cache Storage
+          return Promise.all(registrations.map(function (reg) {
+            return reg.unregister();
+          })).then(function () {
+            if (window.caches && window.caches.keys) {
+              return window.caches.keys().then(function (keys) {
+                return Promise.all(keys.map(function (key) {
+                  return window.caches.delete(key);
+                }));
+              });
+            }
+          }).then(function () {
+            try { localStorage.setItem(MIGRATE_KEY, MIGRATE_VERSION); } catch (e) {}
+            // 清理完成后刷新一次，加载新资源
+            window.location.reload();
+          });
+        }).catch(function () {
+          // 清理失败也不阻塞页面渲染，下次打开会重试
+        });
+      })();
+    </script>
+    <meta name="description" content="学期 DDL 与今日三件事，本地优先，数据保存在浏览器 IndexedDB。" />
+
+    <!-- iOS 添加到主屏幕 -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="DDL" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+
+    <title>学期 DDL · 今日三件事</title>
+    <script type="module" crossorigin src="./assets/index-DM3jsumb.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-Bh1KyQaD.css">
+  <link rel="manifest" href="./manifest.webmanifest"></head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
