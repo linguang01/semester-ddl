@@ -1,0 +1,39 @@
+# 推送到 main 分支时自动构建，并发布到 gh-pages 分支
+# 前提：GitHub 仓库 Settings -> Pages 中 Source 选择 gh-pages 分支
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  # 允许在 Actions 页面手动触发
+  workflow_dispatch:
+
+# peaceiris/actions-gh-pages 需要写权限，才能用 GITHUB_TOKEN 推送 gh-pages 分支
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # 项目带 package-lock.json，用 npm ci 保证依赖安装可复现
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
