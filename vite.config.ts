@@ -1,16 +1,42 @@
+import { execSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
+const pkg = JSON.parse(
+  readFileSync(new URL('./package.json', import.meta.url), 'utf-8'),
+) as { version: string };
+
+function gitShortHash(): string {
+  try {
+    return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString()
+      .trim();
+  } catch {
+    // 无 git 环境时的占位值
+    return 'nogit';
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
+  define: {
+    // 构建信息注入源码：设置面板展示，用于核对手机上运行的到底是哪个版本
+    __APP_VERSION__: JSON.stringify(pkg.version),
+    __BUILD_GIT_HASH__: JSON.stringify(gitShortHash()),
+    __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+  },
   plugins: [
     react(),
     tailwindcss(),
     VitePWA({
       // 自动更新：新 SW 安装后立即 skipWaiting 接管，避免手机端卡旧版本
       registerType: 'autoUpdate',
+      // 注册与主动更新检查逻辑在 src/pwa.ts 通过 virtual:pwa-register 接管，
+      // 插件检测到导入后不会再注入 registerSW.js
+      injectRegister: 'auto',
       manifest: {
         name: 'DDL 三件事',
         short_name: 'DDL',

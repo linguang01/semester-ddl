@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import dayjs from 'dayjs';
+import { checkForUpdate, type UpdateCheckResult } from '../pwa';
 import type { InstallPromptApi } from '../hooks/useInstallPrompt';
 import { THEME_OPTIONS, type UseThemeResult } from '../hooks/useTheme';
 import {
@@ -14,7 +16,7 @@ import {
 import { exportTasksToCalendar } from '../utils/calendar';
 import { ConfirmDialog } from './ConfirmDialog';
 import { InstallPrompt } from './InstallPrompt';
-import type { Notify } from './Toast';
+import type { Notify, ToastTone } from './Toast';
 import { XIcon } from './icons';
 
 interface SettingsSheetProps {
@@ -29,11 +31,20 @@ const ACTION_BUTTON_CLASS =
 
 const THEME_OPTION_CLASS = 'h-11 rounded-xl text-xs font-medium transition';
 
+const UPDATE_RESULT_TOAST: Record<UpdateCheckResult, { message: string; tone: ToastTone }> = {
+  updated: { message: '发现新版本，正在自动更新并刷新…', tone: 'info' },
+  latest: { message: '已是最新版本', tone: 'success' },
+  offline: { message: '当前处于离线状态，联网后会自动检查更新', tone: 'info' },
+  unsupported: { message: '当前环境不支持自动更新（需 HTTPS 或 localhost 部署）', tone: 'error' },
+  error: { message: '检查更新失败，请稍后重试', tone: 'error' },
+};
+
 export function SettingsSheet({ install, theme, notify, onClose }: SettingsSheetProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [calendarExporting, setCalendarExporting] = useState(false);
+  const [checking, setChecking] = useState(false);
   const [report, setReport] = useState<ImportReport | null>(null);
   const [pendingBackup, setPendingBackup] = useState<ParsedBackup | null>(null);
 
@@ -128,6 +139,19 @@ export function SettingsSheet({ install, theme, notify, onClose }: SettingsSheet
       notify(error instanceof Error ? error.message : '导出失败，请稍后重试', 'error');
     } finally {
       setCalendarExporting(false);
+    }
+  };
+
+  const handleCheckUpdate = async () => {
+    if (checking) return;
+    setChecking(true);
+
+    try {
+      const result = await checkForUpdate();
+      const { message, tone } = UPDATE_RESULT_TOAST[result];
+      notify(message, tone);
+    } finally {
+      setChecking(false);
     }
   };
 
@@ -260,10 +284,30 @@ export function SettingsSheet({ install, theme, notify, onClose }: SettingsSheet
           )}
         </section>
 
+        <section className="mt-5">
+          <h3 className="text-xs font-medium text-slate-500 dark:text-slate-400">版本与更新</h3>
+          <p className="mt-1 text-[11px] leading-relaxed text-slate-400 dark:text-slate-500">
+            当前版本 v{__APP_VERSION__} · {__BUILD_GIT_HASH__}，构建于{' '}
+            {dayjs(__BUILD_TIME__).format('YYYY年M月D日 HH:mm')}。
+          </p>
+          <p className="mt-1.5 text-[11px] leading-relaxed text-slate-400 dark:text-slate-500">
+            应用会在打开、切回前台、网络恢复时自动检查更新，页面开着时每小时也会检查一次；发现新版本会自动刷新。
+          </p>
+
+          <button
+            type="button"
+            onClick={() => void handleCheckUpdate()}
+            disabled={checking}
+            className={`${ACTION_BUTTON_CLASS} mt-2 w-full`}
+          >
+            {checking ? '检查中…' : '检查更新'}
+          </button>
+        </section>
+
         <section className="mt-5 rounded-xl bg-slate-50 px-3 py-3 dark:bg-slate-800/60">
           <h3 className="text-xs font-medium text-slate-700 dark:text-slate-300">关于离线使用</h3>
           <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-            在 HTTPS 或 localhost 下，首次打开后应用会自动缓存，之后可以离线打开；发布新版本时，下次打开会自动更新。
+            在 HTTPS 或 localhost 下，首次打开后应用会自动缓存，之后可以离线打开；发布新版本后，应用会在打开或切回前台时自动更新。
           </p>
           <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
             PWA 安装和 Service Worker 需要 HTTPS 或 localhost。通过局域网 IP（192.168.x.x）的 HTTP

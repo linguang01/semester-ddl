@@ -18,7 +18,7 @@ npm run build
 npm run preview
 ```
 
-- `npm run build`：类型检查 + 构建，产物输出到 `dist/`（包含 `manifest.webmanifest`、`sw.js`、`registerSW.js` 和 PWA 图标）。
+- `npm run build`：类型检查 + 构建，产物输出到 `dist/`（包含 `manifest.webmanifest`、`sw.js` 和 PWA 图标；SW 注册与更新检查逻辑打包进主 JS，由 `src/pwa.ts` 接管）。
 - `npm run preview`：本地预览构建产物，默认 `http://localhost:4173`。
 
 ## 部署到 Vercel（GitHub 方式）
@@ -56,6 +56,29 @@ gh repo create semester-ddl --public --source=. --push
 
 - **Android / 桌面 Chrome**：打开页面 → 右上角设置 → 「安装到手机」，或直接在 Chrome 菜单里选「安装应用 / 添加到主屏幕」。
 - **iPhone / iPad**：Safari 打开页面 → 点底部「分享」按钮 → 选择「添加到主屏幕」。
+
+## 应用更新机制（重要）
+
+部署新版本后，手机上的应用会自动更新，**不需要重新安装、不需要清数据**：
+
+- **应用打开、从后台切回前台、网络恢复**时，都会主动检查 `sw.js` 是否有新版本（不再只依赖浏览器「打开页面才检查」的被动机制）；
+- **页面一直开着**时，每小时也会自动检查一次；
+- 发现新版本后自动下载并**自动刷新**（正在操作时会等切到后台再刷新，最多延迟 2 分钟，避免打断输入）；
+- 也可以在「设置 → 版本与更新」里点「**检查更新**」立即检查，并核对当前版本号、git 短哈希和构建时间——用来确认手机上跑的就是最新构建。
+
+配套的缓存策略已写进部署配置（`vercel.json` / `edgeone.json`）：
+
+- `sw.js`、`index.html`、`manifest.webmanifest` 配置 `Cache-Control: no-cache`——这三个文件必须每次回源校验，否则 CDN 边缘节点缓存旧 `sw.js`，浏览器永远发现不了新版本（这正是之前「手机上不更新」的根因之一）；
+- `/assets/*` 文件名带内容哈希，配置为一年不可变缓存，保证加载速度。
+
+部署后可以验证：`curl -I https://你的地址/sw.js`，响应头应包含 `Cache-Control: no-cache`。
+
+> 若 EdgeOne 不识别 `edgeone.json` 里的 `headers` 字段（以官方文档为准）导致部署报错，删掉该字段后在 EdgeOne 控制台手动配置同样的缓存规则即可。
+
+**两个前提，缺一不可**：
+
+1. **访问地址必须固定**：装到主屏幕的应用绑定部署域名。如果每次部署用临时预览链接或更换域名，旧安装的应用不会更新，只能重新安装。请用固定域名（Vercel 项目域名或 EdgeOne 正式项目 + 自定义域名）。
+2. **必须 HTTPS**：Service Worker 只在 HTTPS（或 localhost）下生效。
 
 ## 外观：深浅色自动切换
 

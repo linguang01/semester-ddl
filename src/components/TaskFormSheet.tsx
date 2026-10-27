@@ -87,7 +87,7 @@ export function TaskFormSheet({
     const result = parseQuickAdd(value);
     // 只有真正识别到日期/时间才回填截止时间，否则保留用户手动选择或默认值
     if (result.hasDate || result.hasTime) {
-      setDeadline(result.deadline.format('YYYY-MM-DDTHH:mm'));
+      setDeadline(dayjs(result.deadline).format('YYYY-MM-DDTHH:mm'));
     }
   };
 

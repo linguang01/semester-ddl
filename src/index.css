@@ -3,6 +3,19 @@
 /* 深色模式通过 html.dark 类切换（跟随早晚时间，见 useTheme） */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* 彻底隐藏 EdgeOne 演示部署注入的底部水印（class 形如 edgeone-demo-watermark）。
+   用属性选择器兜底，覆盖平台可能注入的任意 edgeone/watermark 命名的固定元素。 */
+[class*='edgeone'],
+[class*='watermark'],
+.edgeone-demo-watermark {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
 @layer base {
   html {
     -webkit-tap-highlight-color: transparent;
