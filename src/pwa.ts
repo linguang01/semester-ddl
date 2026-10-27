@@ -112,7 +112,8 @@ export async function checkForUpdate(): Promise<UpdateCheckResult> {
   if (!navigator.onLine) return 'offline';
 
   try {
-    const reg = registration ?? (await navigator.serviceWorker.getRegistration('/'));
+    // 不传参按当前页面 URL 匹配 scope，兼容根路径与子路径（GitHub Pages）部署
+    const reg = registration ?? (await navigator.serviceWorker.getRegistration());
     if (!reg) return 'unsupported';
 
     // 手动检查发现新版本时立即刷新，不走延迟逻辑（须在 update() 之前设置）
