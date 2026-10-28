@@ -3,9 +3,10 @@ import dayjs from 'dayjs';
 import type { NewTaskInput, Task, TaskPriority, TaskType, TaskUpdate } from '../types';
 import { PRIORITY_LABEL, TASK_PRIORITIES, TASK_TYPES, TYPE_LABEL } from '../utils/taskDisplay';
 import { parseQuickAdd } from '../utils/parseQuickAdd';
+import { parseSmartInput, type SmartParseResult } from '../utils/parseSmartInput';
 import { ConfirmDialog } from './ConfirmDialog';
 import type { Notify } from './Toast';
-import { XIcon } from './icons';
+import { WandIcon, XIcon } from './icons';
 
 interface TaskFormSheetProps {
   /** null 表示新增 */
@@ -26,6 +27,9 @@ interface FormErrors {
 
 const INPUT_CLASS =
   'mt-1.5 h-12 w-full min-w-0 max-w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-base text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-indigo-500 dark:focus:bg-slate-800 dark:focus:ring-indigo-500/20';
+
+const CHIP_CLASS =
+  'inline-flex items-center rounded-md bg-white px-2 py-1 text-slate-600 shadow-sm ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700';
 
 export function TaskFormSheet({
   task,
@@ -55,6 +59,9 @@ export function TaskFormSheet({
   const [errors, setErrors] = useState<FormErrors>({});
   const [submitting, setSubmitting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // 智能录入：原始输入 + 解析结果预览
+  const [smartText, setSmartText] = useState('');
+  const [smartPreview, setSmartPreview] = useState<SmartParseResult | null>(null);
 
   const submitLock = useRef(false);
 
@@ -99,6 +106,28 @@ export function TaskFormSheet({
   const handleTitleBlur = () => {
     if (isEditing) return;
     setTitle(parseQuickAdd(title).title);
+  };
+
+  // 智能录入：一句话解析并回填整个表单（仅新增任务启用）
+  const handleSmartChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value;
+    setSmartText(value);
+
+    if (!value.trim()) {
+      setSmartPreview(null);
+      return;
+    }
+
+    const result = parseSmartInput(value);
+    setSmartPreview(result);
+
+    // 回填各字段；标题为空时不动标题，避免误清空
+    if (result.title) setTitle(result.title);
+    setDeadline(dayjs(result.deadline).format('YYYY-MM-DDTHH:mm'));
+    setCourse(result.course);
+    setHours(String(result.estimatedHours));
+    setPriority(result.priority);
+    setType(result.type);
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -230,6 +259,45 @@ export function TaskFormSheet({
           </button>
         </div>
 
+        {!isEditing && (
+          <div className="mt-4 rounded-2xl border border-indigo-200 bg-indigo-50/60 p-3 dark:border-indigo-500/30 dark:bg-indigo-500/10">
+            <label className="flex items-center gap-1.5">
+              <WandIcon className="h-4 w-4 text-indigo-500 dark:text-indigo-400" />
+              <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400">
+                智能录入：一句话自动填表
+              </span>
+            </label>
+            <input
+              id="task-smart"
+              value={smartText}
+              onChange={handleSmartChange}
+              autoFocus
+              maxLength={120}
+              placeholder="例如：明天下午3点交高数作业，预计2小时，高优先级"
+              className="mt-2 h-12 w-full min-w-0 max-w-full rounded-xl border border-indigo-200 bg-white px-3 text-base text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-indigo-500/40 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-indigo-500 dark:focus:ring-indigo-500/20"
+            />
+            {smartPreview && (
+              <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+                <span className="text-slate-400 dark:text-slate-500">已识别</span>
+                {smartPreview.hasDate || smartPreview.hasTime ? (
+                  <span className={CHIP_CLASS}>
+                    时间 {dayjs(smartPreview.deadline).format('M月D日 HH:mm')}
+                  </span>
+                ) : null}
+                {smartPreview.hasCourse ? (
+                  <span className={CHIP_CLASS}>课程 {smartPreview.course}</span>
+                ) : null}
+                {smartPreview.hasHours ? (
+                  <span className={CHIP_CLASS}>耗时 {smartPreview.estimatedHours} 小时</span>
+                ) : null}
+                {smartPreview.hasPriority ? (
+                  <span className={CHIP_CLASS}>{PRIORITY_LABEL[smartPreview.priority]}优先级</span>
+                ) : null}
+              </div>
+            )}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} noValidate>
           <label className="mt-3 block">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
@@ -241,7 +309,6 @@ export function TaskFormSheet({
               onChange={handleTitleChange}
               onBlur={handleTitleBlur}
               maxLength={80}
-              autoFocus={!isEditing}
               placeholder="例如：明天下午3点交高数作业"
               className={INPUT_CLASS}
             />

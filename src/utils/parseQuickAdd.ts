@@ -44,9 +44,10 @@ const WEEKDAY_MAP: Record<string, number> = {
   六: 6,
 };
 
-// 日期关键词：按「长词在前」排序，避免「大后天」被「后天」抢先匹配。
+// 日期关键词：按「长词在前」排序，避免「大后天」被「后天」抢先匹配；
+// 「下周X」放在「周X」前，避免「下周一」被截成「周一」而残留「下」
 const DATE_RE =
-  /(大后天|后天|明天|今天|周末|周[一二三四五六日天]|星期[一二三四五六日天]|礼拜[一二三四五六日天]|\d{1,2}\s*[号日])/;
+  /(大后天|后天|明天|今天|周末|下星期[一二三四五六日天]|下礼拜[一二三四五六日天]|下周[一二三四五六日天]|周[一二三四五六日天]|星期[一二三四五六日天]|礼拜[一二三四五六日天]|\d{1,2}\s*[号日])/;
 
 // 时段前缀（多字词在前，避免「晚上」被「晚」抢先截断）
 const PERIOD = '上午|早上|早晨|凌晨|中午|下午|晚上|傍晚|深夜|夜里|午夜|早|晚';
@@ -174,6 +175,10 @@ function resolveDate(token: string, today: dayjs.Dayjs): dayjs.Dayjs | null {
 
   const weekday = token.match(/^(?:周|星期|礼拜)([一二三四五六日天])$/);
   if (weekday) return nextWeekday(today, WEEKDAY_MAP[weekday[1]]);
+
+  // 「下周X / 下星期X / 下礼拜X」：本周同一天再 +7 天（严格下个自然周）
+  const nextWeek = token.match(/^下(?:周|星期|礼拜)([一二三四五六日天])$/);
+  if (nextWeek) return nextWeekday(today, WEEKDAY_MAP[nextWeek[1]]).add(7, 'day');
 
   const dayOfMonth = token.match(/^(\d{1,2})\s*[号日]$/);
   if (dayOfMonth) {
