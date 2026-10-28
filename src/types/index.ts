@@ -17,6 +17,8 @@ export interface Task {
   deadline: string;
   /** 预计耗时（小时） */
   estimatedHours: number;
+  /** 实际耗时（小时），完成后由用户手动填写；未填则为空 */
+  actualHours?: number;
   priority: TaskPriority;
   status: TaskStatus;
   /** ISO 8601 字符串 */
@@ -33,13 +35,18 @@ export interface NewTaskInput {
   deadline: string;
   /** 默认 0 */
   estimatedHours?: number;
+  /** 默认空（完成后填写） */
+  actualHours?: number;
   /** 默认 medium */
   priority?: TaskPriority;
 }
 
 /** 更新任务时允许修改的字段；completedAt 由 status 变化自动维护 */
 export type TaskUpdate = Partial<
-  Pick<Task, 'title' | 'type' | 'course' | 'deadline' | 'estimatedHours' | 'priority' | 'status'>
+  Pick<
+    Task,
+    'title' | 'type' | 'course' | 'deadline' | 'estimatedHours' | 'actualHours' | 'priority' | 'status'
+  >
 >;
 
 /** 每日选择记录：一天最多 3 个任务 id */

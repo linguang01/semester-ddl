@@ -1,6 +1,6 @@
-import { ListIcon, PlusIcon, SunIcon } from './icons';
+import { ChartIcon, ListIcon, PlusIcon, SunIcon } from './icons';
 
-export type TabKey = 'all' | 'today';
+export type TabKey = 'all' | 'today' | 'stats';
 
 interface BottomNavProps {
   active: TabKey;
@@ -15,7 +15,7 @@ export function BottomNav({ active, onChange, onCreate }: BottomNavProps) {
       className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 shadow-[0_-4px_16px_rgba(15,23,42,0.04)] backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 dark:shadow-[0_-4px_16px_rgba(0,0,0,0.4)]"
     >
       <div
-        className="mx-auto grid max-w-md grid-cols-3"
+        className="mx-auto grid max-w-md grid-cols-4"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 20px)' }}
       >
         <button
@@ -28,6 +28,18 @@ export function BottomNav({ active, onChange, onCreate }: BottomNavProps) {
         >
           <ListIcon className="h-[22px] w-[22px]" />
           全部
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onChange('stats')}
+          aria-current={active === 'stats' ? 'page' : undefined}
+          className={`flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium transition ${
+            active === 'stats' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'
+          }`}
+        >
+          <ChartIcon className="h-[22px] w-[22px]" />
+          统计
         </button>
 
         <span aria-hidden="true" className="flex h-16 items-center justify-center" />

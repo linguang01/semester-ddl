@@ -21,6 +21,7 @@ interface FormErrors {
   title?: string;
   deadline?: string;
   hours?: string;
+  actualHours?: string;
 }
 
 const INPUT_CLASS =
@@ -47,6 +48,9 @@ export function TaskFormSheet({
       : dayjs().hour(23).minute(59).second(0).format('YYYY-MM-DDTHH:mm'),
   );
   const [hours, setHours] = useState(task ? String(task.estimatedHours) : '1');
+  const [actualHours, setActualHours] = useState(
+    task?.actualHours != null ? String(task.actualHours) : '',
+  );
   const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? 'medium');
   const [errors, setErrors] = useState<FormErrors>({});
   const [submitting, setSubmitting] = useState(false);
@@ -121,6 +125,18 @@ export function TaskFormSheet({
       nextErrors.hours = '预计耗时需大于 0 且不超过 100 小时';
     }
 
+    // 实际耗时选填：留空表示未统计；填写则与预计耗时同一量级约束
+    let parsedActualHours: number | undefined;
+    const trimmedActual = actualHours.trim();
+    if (trimmedActual) {
+      const value = Number(trimmedActual);
+      if (!Number.isFinite(value) || value <= 0 || value > 100) {
+        nextErrors.actualHours = '实际耗时需大于 0 且不超过 100 小时';
+      } else {
+        parsedActualHours = value;
+      }
+    }
+
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
@@ -134,6 +150,7 @@ export function TaskFormSheet({
         course: course.trim(),
         deadline: parsedDeadline.toISOString(),
         estimatedHours: parsedHours,
+        actualHours: parsedActualHours,
         priority,
       };
 
@@ -313,6 +330,32 @@ export function TaskFormSheet({
             </span>
           </label>
           {errors.hours && <p className="mt-1 text-[11px] text-rose-600">{errors.hours}</p>}
+
+          <label className="mt-4 block">
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+              实际耗时（选填，完成后统计用）
+            </span>
+            <span className="relative mt-1.5 block">
+              <input
+                id="task-actual-hours"
+                type="number"
+                inputMode="decimal"
+                step="0.5"
+                min="0.5"
+                max="100"
+                value={actualHours}
+                onChange={(event) => setActualHours(event.target.value)}
+                placeholder="完成后填写"
+                className={`${INPUT_CLASS} mt-0 pr-14`}
+              />
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 dark:text-slate-500">
+                小时
+              </span>
+            </span>
+          </label>
+          {errors.actualHours && (
+            <p className="mt-1 text-[11px] text-rose-600">{errors.actualHours}</p>
+          )}
 
           <div className="mt-4">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">优先级</span>

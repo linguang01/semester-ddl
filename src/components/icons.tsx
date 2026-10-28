@@ -54,6 +54,15 @@ export function SunIcon({ className = 'h-5 w-5' }: IconProps) {
   );
 }
 
+export function ChartIcon({ className = 'h-5 w-5' }: IconProps) {
+  return (
+    <svg {...iconProps} className={className}>
+      <path d="M3 3v16a2 2 0 0 0 2 2h16" />
+      <path d="M8 17v-3M13 17V7M18 17v-6" />
+    </svg>
+  );
+}
+
 export function SettingsIcon({ className = 'h-5 w-5' }: IconProps) {
   return (
     <svg {...iconProps} className={className}>

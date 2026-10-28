@@ -4,6 +4,7 @@ import { AllTasksView } from './components/AllTasksView';
 import { BottomNav, type TabKey } from './components/BottomNav';
 import { EmptyState } from './components/EmptyState';
 import { SettingsSheet } from './components/SettingsSheet';
+import { StatsView } from './components/StatsView';
 import { TaskFormSheet } from './components/TaskFormSheet';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { FocusOverlay } from './components/FocusOverlay';
@@ -217,12 +218,14 @@ export default function App() {
                 SEMESTER DDL
               </p>
               <h1 className="mt-0.5 text-xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">
-                {tab === 'all' ? '全部事项' : '今天'}
+                {tab === 'all' ? '全部事项' : tab === 'stats' ? '统计' : '今天'}
               </h1>
               <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
                 {tab === 'all'
                   ? `共 ${tasks.length} 件 · 按 DDL 先后排序`
-                  : dayjs(today).format('M月D日 ddd')}
+                  : tab === 'stats'
+                    ? '图表数据来自本地存储'
+                    : dayjs(today).format('M月D日 ddd')}
               </p>
             </div>
 
@@ -253,6 +256,8 @@ export default function App() {
               onEdit={openEdit}
               onToggle={handleToggle}
             />
+          ) : tab === 'stats' ? (
+            <StatsView tasks={tasks} isDark={theme.isDark} />
           ) : (
             <TodayView
               date={today}

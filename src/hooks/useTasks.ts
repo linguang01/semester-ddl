@@ -50,6 +50,7 @@ export function useTasks(): UseTasksResult {
       course: input.course.trim(),
       deadline: normalizeDeadline(input.deadline),
       estimatedHours: input.estimatedHours ?? 0,
+      actualHours: input.actualHours,
       priority: input.priority ?? 'medium',
       status: 'todo',
       createdAt: new Date().toISOString(),
@@ -72,6 +73,13 @@ export function useTasks(): UseTasksResult {
         throw new Error('预计耗时必须是非负数字');
       }
       changes.estimatedHours = patch.estimatedHours;
+    }
+
+    if (patch.actualHours !== undefined) {
+      if (!Number.isFinite(patch.actualHours) || patch.actualHours < 0) {
+        throw new Error('实际耗时必须是非负数字');
+      }
+      changes.actualHours = patch.actualHours;
     }
 
     if (patch.deadline !== undefined) {
