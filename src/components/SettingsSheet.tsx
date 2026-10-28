@@ -9,11 +9,25 @@ import {
   downloadPreImportBackup,
   exportBackup,
   mergeBackup,
+  overwriteBackup,
   readBackupFile,
   type ImportReport,
   type ParsedBackup,
 } from '../utils/backup';
 import { exportTasksToCalendar } from '../utils/calendar';
+import {
+  getNotificationState,
+  requestNotificationPermission,
+  sendTestNotification,
+  type NotificationPermissionState,
+} from '../utils/ddlNotify';
+import {
+  backupToGist,
+  downloadFromGist,
+  getStoredGistId,
+  getStoredToken,
+  type GistUploadResult,
+} from '../utils/gistBackup';
 import { ConfirmDialog } from './ConfirmDialog';
 import { InstallPrompt } from './InstallPrompt';
 import type { Notify, ToastTone } from './Toast';
@@ -52,6 +66,15 @@ export function SettingsSheet({ install, theme, notify, onClose }: SettingsSheet
   const [checking, setChecking] = useState(false);
   const [report, setReport] = useState<ImportReport | null>(null);
   const [pendingBackup, setPendingBackup] = useState<ParsedBackup | null>(null);
+
+  // 通知权限状态（打开面板时读取当前值，请求后刷新）
+  const [notifyState, setNotifyState] = useState<NotificationPermissionState>(() => getNotificationState());
+  // Gist 云备份：Token / Gist ID 预填自 localStorage
+  const [gistToken, setGistToken] = useState(() => getStoredToken());
+  const [gistId, setGistId] = useState(() => getStoredGistId());
+  const [gistBusy, setGistBusy] = useState<'upload' | 'download' | null>(null);
+  const [gistInfo, setGistInfo] = useState<GistUploadResult | null>(null);
+  const [pendingGistBackup, setPendingGistBackup] = useState<ParsedBackup | null>(null);
 
   useEffect(() => {
     const previous = document.body.style.overflow;
@@ -160,6 +183,74 @@ export function SettingsSheet({ install, theme, notify, onClose }: SettingsSheet
     }
   };
 
+  // 请求通知权限（必须在用户点击手势中调用）
+  const handleEnableNotification = async () => {
+    const state = await requestNotificationPermission();
+    setNotifyState(state);
+
+    if (state === 'granted') {
+      notify('通知权限已开启', 'success');
+      void sendTestNotification();
+    } else if (state === 'denied') {
+      notify('通知权限被拒绝，请在浏览器网站设置里手动开启', 'error');
+    } else {
+      notify('当前浏览器不支持系统通知', 'error');
+    }
+  };
+
+  // 上传当前数据到私有 Gist
+  const handleGistUpload = async () => {
+    if (gistBusy) return;
+    setGistBusy('upload');
+    try {
+      const result = await backupToGist(gistToken);
+      setGistId(result.gistId);
+      setGistInfo(result);
+      notify(result.created ? '已上传到私有 Gist' : '已更新私有 Gist 备份', 'success');
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '上传失败', 'error');
+    } finally {
+      setGistBusy(null);
+    }
+  };
+
+  // 按 Gist ID 拉取备份，解析成功后弹确认框，确认后覆盖本地
+  const handleGistDownload = async () => {
+    if (gistBusy) return;
+    if (!gistId.trim()) {
+      notify('请先填写 Gist ID', 'error');
+      return;
+    }
+    setGistBusy('download');
+    try {
+      const parsed = await downloadFromGist(gistId, gistToken);
+      setPendingGistBackup(parsed);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '下载失败', 'error');
+    } finally {
+      setGistBusy(null);
+    }
+  };
+
+  const handleConfirmGistOverwrite = async () => {
+    if (!pendingGistBackup) return;
+    const parsed = pendingGistBackup;
+    setPendingGistBackup(null);
+    setGistBusy('download');
+
+    try {
+      // 覆盖前先下载一份本地数据，便于回退
+      await downloadPreImportBackup();
+      const result = await overwriteBackup(parsed);
+      const hasSkipped = result.skippedTasks + result.skippedSelections > 0;
+      notify(describeImportReport(result), hasSkipped ? 'info' : 'success');
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '覆盖失败，现有数据未受影响', 'error');
+    } finally {
+      setGistBusy(null);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center">
       <div
@@ -223,6 +314,26 @@ export function SettingsSheet({ install, theme, notify, onClose }: SettingsSheet
           <div className="mt-1.5">
             <InstallPrompt install={install} />
           </div>
+        </section>
+
+        <section className="mt-5">
+          <h3 className="text-xs font-medium text-slate-500 dark:text-slate-400">通知提醒</h3>
+          <p className="mt-1 text-[11px] leading-relaxed text-slate-400 dark:text-slate-500">
+            开启后，任务距离 DDL 不足 24 小时会弹系统通知。仅应用/页面打开或挂在后台时生效，彻底关闭后无法推送。
+          </p>
+          <button
+            type="button"
+            onClick={() => void handleEnableNotification()}
+            disabled={notifyState === 'granted'}
+            className={`${ACTION_BUTTON_CLASS} mt-2 w-full`}
+          >
+            {notifyState === 'granted' ? '通知已开启' : '开启通知'}
+          </button>
+          {notifyState === 'denied' && (
+            <p className="mt-1.5 rounded-lg bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+              通知权限已被拒绝，请在浏览器「网站设置 → 通知」里手动改为允许。
+            </p>
+          )}
         </section>
 
         <section className="mt-5">
@@ -290,6 +401,72 @@ export function SettingsSheet({ install, theme, notify, onClose }: SettingsSheet
         </section>
 
         <section className="mt-5">
+          <h3 className="text-xs font-medium text-slate-500 dark:text-slate-400">云备份（GitHub Gist）</h3>
+          <p className="mt-1 text-[11px] leading-relaxed text-slate-400 dark:text-slate-500">
+            用 GitHub Personal Access Token 把数据备份到私有 Gist；换设备时按 Gist ID 拉回并覆盖本地。
+          </p>
+
+          <label className="mt-2 block">
+            <span className="text-[11px] text-slate-500 dark:text-slate-400">Personal Access Token</span>
+            <input
+              type="password"
+              value={gistToken}
+              onChange={(event) => setGistToken(event.target.value)}
+              placeholder="ghp_… 或 github_pat_…"
+              autoComplete="off"
+              spellCheck={false}
+              className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-indigo-400 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
+            />
+          </label>
+          <p className="mt-1 text-[11px] leading-relaxed text-slate-400 dark:text-slate-500">
+            建议用「细粒度 Token」只授权 Gist 读写；Token 明文存本机，请勿共用账号。
+          </p>
+
+          <button
+            type="button"
+            onClick={() => void handleGistUpload()}
+            disabled={gistBusy !== null}
+            className={`${ACTION_BUTTON_CLASS} mt-2 w-full`}
+          >
+            {gistBusy === 'upload' ? '上传中…' : '上传到私有 Gist'}
+          </button>
+
+          <div className="mt-2 flex gap-2">
+            <input
+              type="text"
+              value={gistId}
+              onChange={(event) => setGistId(event.target.value)}
+              placeholder="Gist ID"
+              spellCheck={false}
+              className="h-11 min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-indigo-400 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
+            />
+            <button
+              type="button"
+              onClick={() => void handleGistDownload()}
+              disabled={gistBusy !== null}
+              className="flex h-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
+            >
+              {gistBusy === 'download' ? '下载中…' : '从 Gist 下载'}
+            </button>
+          </div>
+
+          {gistInfo && (
+            <p className="mt-1.5 break-all text-[11px] leading-relaxed text-slate-400 dark:text-slate-500">
+              已备份 Gist ID：{gistInfo.gistId}（
+              <a
+                href={gistInfo.htmlUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-indigo-500 underline"
+              >
+                查看
+              </a>
+              ）
+            </p>
+          )}
+        </section>
+
+        <section className="mt-5">
           <h3 className="text-xs font-medium text-slate-500 dark:text-slate-400">版本与更新</h3>
           <p className="mt-1 text-[11px] leading-relaxed text-slate-400 dark:text-slate-500">
             当前版本 v{__APP_VERSION__} · {__BUILD_GIT_HASH__}，构建于{' '}
@@ -339,6 +516,21 @@ export function SettingsSheet({ install, theme, notify, onClose }: SettingsSheet
           onCancel={() => {
             setPendingBackup(null);
             notify('已取消导入', 'info');
+          }}
+        />
+      )}
+
+      {pendingGistBackup && (
+        <ConfirmDialog
+          title="覆盖本地数据"
+          message={`将用云端备份覆盖本地全部数据（${pendingGistBackup.tasks.length} 条任务、${pendingGistBackup.dailySelections.length} 条今日选择），覆盖前会先下载一份当前数据备份。继续？`}
+          confirmText="覆盖"
+          cancelText="取消"
+          tone="danger"
+          onConfirm={() => void handleConfirmGistOverwrite()}
+          onCancel={() => {
+            setPendingGistBackup(null);
+            notify('已取消覆盖', 'info');
           }}
         />
       )}

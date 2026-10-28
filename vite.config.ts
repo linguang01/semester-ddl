@@ -36,6 +36,11 @@ export default defineConfig({
     VitePWA({
       // 自动更新：新 SW 安装后立即 skipWaiting 接管，避免手机端卡旧版本
       registerType: 'autoUpdate',
+      // 使用自定义 Service Worker（src/sw.ts），以加入 DDL 系统通知的 message/notificationclick 处理
+      strategies: 'injectManifest',
+      // SW 源码目录与文件名（插件用 esbuild 独立编译，不走 tsc）
+      srcDir: 'src',
+      filename: 'sw.ts',
       // 注册与主动更新检查逻辑在 src/pwa.ts 通过 virtual:pwa-register 接管，
       // 插件检测到导入后不会再注入 registerSW.js
       injectRegister: 'auto',
@@ -69,17 +74,10 @@ export default defineConfig({
           },
         ],
       },
-      workbox: {
+      // injectManifest 策略下，预缓存与导航回退等逻辑写在 src/sw.ts 里，这里只控制构建范围
+      injectManifest: {
         // 预缓存构建产物；本项目没有外部请求，不做运行时缓存
         globPatterns: ['**/*.{js,css,html,svg,png,jpg,jpeg}'],
-        cleanupOutdatedCaches: true,
-        // 相对路径：与预缓存清单里的 index.html 条目一致，
-        // 按 sw.js 所在目录解析，子路径部署也能正确回退
-        navigateFallback: 'index.html',
-        // 新 SW 安装后立即跳过等待并接管所有页面
-        // （autoUpdate 下插件会自动设置这两项，这里显式声明更保险）
-        skipWaiting: true,
-        clientsClaim: true,
       },
       devOptions: {
         enabled: false,

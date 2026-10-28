@@ -103,6 +103,12 @@ export async function exportBackup(): Promise<number> {
   return tasks.length;
 }
 
+/** 构造备份对象（不触发下载），供 Gist 云备份复用 */
+export async function buildBackupPayload(): Promise<BackupPayload> {
+  const { tasks, dailySelections } = await readAllData();
+  return createPayload(tasks, dailySelections);
+}
+
 /** 导入前自动备份当前数据，给用户留回退路径 */
 export async function downloadPreImportBackup(): Promise<void> {
   const { tasks, dailySelections } = await readAllData();
@@ -248,6 +254,26 @@ export async function readBackupFile(file: File): Promise<ParsedBackup> {
 /** 合并导入：同一事务内 bulkPut，任一步失败都会整体回滚 */
 export async function mergeBackup(backup: ParsedBackup): Promise<ImportReport> {
   await db.transaction('rw', db.tasks, db.dailySelections, async () => {
+    if (backup.tasks.length > 0) {
+      await db.tasks.bulkPut(backup.tasks);
+    }
+    if (backup.dailySelections.length > 0) {
+      await db.dailySelections.bulkPut(backup.dailySelections);
+    }
+  });
+
+  return {
+    importedTasks: backup.tasks.length,
+    importedSelections: backup.dailySelections.length,
+    skippedTasks: backup.skippedTasks,
+    skippedSelections: backup.skippedSelections,
+  };
+}
+
+/** 覆盖导入：清空现有数据后写入备份（用于云备份「覆盖本地」），同一事务内整体回滚 */
+export async function overwriteBackup(backup: ParsedBackup): Promise<ImportReport> {
+  await db.transaction('rw', db.tasks, db.dailySelections, async () => {
+    await Promise.all([db.tasks.clear(), db.dailySelections.clear()]);
     if (backup.tasks.length > 0) {
       await db.tasks.bulkPut(backup.tasks);
     }

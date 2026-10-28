@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import dayjs from 'dayjs';
 import { AllTasksView } from './components/AllTasksView';
 import { BottomNav, type TabKey } from './components/BottomNav';
@@ -27,6 +27,7 @@ import {
   requestNotificationPermission,
   sendFocusCompleteNotification,
 } from './utils/focusAlert';
+import { initDdlNotifications } from './utils/ddlNotify';
 import type { NewTaskInput, Task, TaskUpdate } from './types';
 
 type SheetState = { mode: 'create' } | { mode: 'edit'; task: Task } | null;
@@ -168,6 +169,17 @@ export default function App() {
       sendFocusCompleteNotification();
     }
   }, [focus.status]);
+
+  // DDL 通知：用 ref 持有最新任务，定时器里通过 getter 读取，避免闭包拿到旧数据
+  const tasksRef = useRef<Task[]>(tasks);
+  useEffect(() => {
+    tasksRef.current = tasks;
+  }, [tasks]);
+
+  useEffect(() => {
+    // 启动时立即查一次 + 每 15 分钟查一次（仅页面可见时）
+    return initDdlNotifications(() => tasksRef.current);
+  }, []);
 
   const handleAutoSelect = useCallback(() => {
     // 纯函数筛选：最多返回 MAX_DAILY_TASKS 个 id（不足则全选）
