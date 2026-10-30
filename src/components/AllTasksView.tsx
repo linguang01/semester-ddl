@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Task, TaskStatus, TaskType } from '../types';
 import {
   PRIORITY_DOT,
@@ -9,6 +9,7 @@ import {
   formatDeadline,
   isOverdue,
 } from '../utils/taskDisplay';
+import { calcDdlProgress, formatPublishDate, getRemainText } from '../utils/ddlProgress';
 import { CheckIcon } from './icons';
 
 type StatusFilter = 'all' | TaskStatus;
@@ -32,6 +33,13 @@ interface AllTasksViewProps {
 export function AllTasksView({ tasks, todayIds, onEdit, onToggle }: AllTasksViewProps) {
   const [status, setStatus] = useState<StatusFilter>('all');
   const [type, setType] = useState<TypeFilter>('all');
+
+  // 每 60s 刷新一次「当前时间」，驱动进度条与「还剩 X 天」随时间/跨天更新
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const filtered = tasks.filter((task) => {
     if (status !== 'all' && task.status !== status) return false;
@@ -123,6 +131,8 @@ export function AllTasksView({ tasks, todayIds, onEdit, onToggle }: AllTasksView
             const done = task.status === 'done';
             const overdue = isOverdue(task);
             const isToday = todayIds.includes(task.id);
+            const progress = calcDdlProgress(task, now);
+            const urgent = progress.remainDays <= 3; // 含逾期（负数）
 
             return (
               <li
@@ -200,6 +210,37 @@ export function AllTasksView({ tasks, todayIds, onEdit, onToggle }: AllTasksView
                           <span className="max-w-[8rem] truncate">{task.course}</span>
                         </>
                       )}
+                    </span>
+
+                    <span className="mt-2 block">
+                      <span className="flex items-center justify-between gap-2 text-[10px] leading-4">
+                        <span className="shrink-0 text-slate-400 dark:text-slate-500">
+                          发布 {formatPublishDate(progress.createdAt)}
+                        </span>
+                        <span
+                          className={`tabular-nums ${
+                            urgent
+                              ? 'font-semibold text-rose-600 dark:text-rose-400'
+                              : 'text-slate-400 dark:text-slate-500'
+                          }`}
+                        >
+                          {getRemainText(progress.remainDays, progress.totalDays)}
+                        </span>
+                      </span>
+                      <span
+                        role="progressbar"
+                        aria-valuenow={Math.round(progress.percent)}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        className="mt-1 block h-1 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"
+                      >
+                        <span
+                          className={`block h-full rounded-full ${
+                            progress.overdue ? 'bg-rose-500' : 'bg-indigo-500'
+                          }`}
+                          style={{ width: `${progress.percent}%` }}
+                        />
+                      </span>
                     </span>
                   </button>
                 </div>
