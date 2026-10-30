@@ -9,8 +9,8 @@ import {
   formatDeadline,
   isOverdue,
 } from '../utils/taskDisplay';
-import { calcDdlProgress, formatPublishDate, getRemainText } from '../utils/ddlProgress';
 import { CheckIcon } from './icons';
+import { DdlProgressBar } from './DdlProgressBar';
 
 type StatusFilter = 'all' | TaskStatus;
 type TypeFilter = 'all' | TaskType;
@@ -131,8 +131,6 @@ export function AllTasksView({ tasks, todayIds, onEdit, onToggle }: AllTasksView
             const done = task.status === 'done';
             const overdue = isOverdue(task);
             const isToday = todayIds.includes(task.id);
-            const progress = calcDdlProgress(task, now);
-            const urgent = progress.remainDays <= 3; // 含逾期（负数）
 
             return (
               <li
@@ -212,36 +210,7 @@ export function AllTasksView({ tasks, todayIds, onEdit, onToggle }: AllTasksView
                       )}
                     </span>
 
-                    <span className="mt-2 block">
-                      <span className="flex items-center justify-between gap-2 text-[10px] leading-4">
-                        <span className="shrink-0 text-slate-400 dark:text-slate-500">
-                          发布 {formatPublishDate(progress.createdAt)}
-                        </span>
-                        <span
-                          className={`tabular-nums ${
-                            urgent
-                              ? 'font-semibold text-rose-600 dark:text-rose-400'
-                              : 'text-slate-400 dark:text-slate-500'
-                          }`}
-                        >
-                          {getRemainText(progress.remainDays, progress.totalDays)}
-                        </span>
-                      </span>
-                      <span
-                        role="progressbar"
-                        aria-valuenow={Math.round(progress.percent)}
-                        aria-valuemin={0}
-                        aria-valuemax={100}
-                        className="mt-1 block h-1 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"
-                      >
-                        <span
-                          className={`block h-full rounded-full ${
-                            progress.overdue ? 'bg-rose-500' : 'bg-indigo-500'
-                          }`}
-                          style={{ width: `${progress.percent}%` }}
-                        />
-                      </span>
-                    </span>
+                    <DdlProgressBar task={task} now={now} showPublish />
                   </button>
                 </div>
               </li>

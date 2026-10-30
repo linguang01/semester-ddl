@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DDL 任务卡片 · 升级演示</title>
+<style>
+  /* ============================================================
+     CSS 部分：苹果风格圆角 + 平滑过渡 + 三态配色
+     ------------------------------------------------------------
+     三态配色（CSS 变量集中管理，便于一键换色）：
+       normal  —— 蓝色（默认）
+       urgent  —— 红色（紧急：剩余 ≤18% 或 ≤24h）
+       overdue —— 深红（逾期：剩余 <0，进度条 100% 拉满）
+     ============================================================ */
+  :root {
+    /* 苹果风配色 */
+    --blue:    #007aff;
+    --red:     #ff3b30;
+    --deepred: #a50021;
+    --text:    #1d1d1f;
+    --subtext: #8e8e93;
+    --track:   #e9e9eb;
+    --card-bg: #ffffff;
+    --page-bg: #f5f5f7;
+
+    /* 圆角 */
+    --radius-card:  16px;
+    --radius-pill:  999px;
+    --radius-bar:   999px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC",
+                 "Microsoft YaHei", "Segoe UI", sans-serif;
+    background: var(--page-bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    padding: 24px 16px 48px;
+  }
+
+  .page-title { font-size: 20px; font-weight: 700; margin: 0 0 4px; }
+  .page-sub   { font-size: 13px; color: var(--subtext); margin: 0 0 20px; }
+
+  /* ---------- 顶部控制条：模拟时间推进 ---------- */
+  .toolbar {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: rgba(245, 245, 247, 0.92);
+    backdrop-filter: saturate(180%) blur(20px);
+    padding: 12px 0; margin-bottom: 16px;
+  }
+  .toolbar .clock {
+    font-variant-numeric: tabular-nums;
+    font-size: 14px; font-weight: 600;
+  }
+  .toolbar button {
+    appearance: none; border: none; cursor: pointer;
+    background: var(--card-bg); color: var(--text);
+    font-size: 13px; font-weight: 500;
+    padding: 8px 14px; border-radius: var(--radius-pill);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    transition: transform .15s ease, background .2s ease, color .2s ease;
+  }
+  .toolbar button:hover { background: #ececef; }
+  .toolbar button:active { transform: scale(0.96); }
+
+  /* ---------- 卡片网格 ---------- */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+  }
+
+  /* ---------- 卡片主体：苹果风圆角 + 柔和阴影 ---------- */
+  .card {
+    background: var(--card-bg);
+    border-radius: var(--radius-card);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.03);
+    padding: 16px;
+    transition: box-shadow .3s ease, transform .3s ease;
+  }
+  .card:hover {
+    box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+    transform: translateY(-1px);
+  }
+
+  .card-top {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px; margin-bottom: 8px;
+  }
+  .card-type {
+    font-size: 11px; font-weight: 600; color: var(--blue);
+    background: rgba(0,122,255,0.10);
+    padding: 3px 10px; border-radius: var(--radius-pill);
+  }
+  .card-deadline { font-size: 12px; color: var(--subtext); font-variant-numeric: tabular-nums; }
+
+  .card-title { font-size: 16px; font-weight: 700; margin: 0 0 10px; }
+
+  /* 剩余文案：默认蓝色；紧急/逾期时由 .state-* 覆盖为红色加粗 */
+  .remain-text {
+    font-size: 13px; font-weight: 600; color: var(--blue);
+    margin: 0 0 8px;
+    transition: color .3s ease, font-weight .3s ease;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------- 进度条：圆角胶囊 + 平滑宽度过渡 ---------- */
+  .progress-track {
+    height: 10px;
+    width: 100%;
+    background: var(--track);
+    border-radius: var(--radius-bar);
+    overflow: hidden; /* 保证 100% 时填充与轨道圆角完全贴合，不变形 */
+  }
+  .progress-fill {
+    height: 100%;
+    width: 0;               /* 默认 0，由 JS 内联 style 覆盖 */
+    background: var(--blue);
+    border-radius: var(--radius-bar);
+    /* 宽度平滑过渡：快进时间时进度条丝滑推进 */
+    transition: width .6s cubic-bezier(0.25, 0.8, 0.25, 1),
+                background-color .4s ease;
+  }
+
+  .card-meta {
+    margin-top: 10px; font-size: 11px; color: var(--subtext);
+    font-variant-numeric: tabular-nums;
+  }
+  .card-note {
+    margin-top: 4px; font-size: 11px; color: #c7c7cc;
+  }
+
+  /* ---------- 三态覆盖：紧急 / 逾期 ---------- */
+  /* 紧急：文字红 + 加粗，进度条红 */
+  .card.state-urgent .remain-text { color: var(--red); font-weight: 800; }
+  .card.state-urgent .progress-fill { background: var(--red); }
+
+  /* 逾期：文字深红 + 加粗，进度条深红（宽度强制 100%） */
+  .card.state-overdue .remain-text { color: var(--deepred); font-weight: 800; }
+  .card.state-overdue .progress-fill { background: var(--deepred); }
+</style>
+</head>
+<body>
+  <h1 class="page-title">DDL 任务卡片 · 升级演示</h1>
+  <p class="page-sub">剩余百分比 ≤18% 或 ≤24h 变红加粗；逾期进度条 100% 深红；刚创建进度接近 0%。</p>
+
+  <!-- 控制条：模拟时间推进，直观观察状态切换与过渡动画 -->
+  <div class="toolbar">
+    <span class="clock" id="clock">--</span>
+    <button id="btn-1h">+1 小时</button>
+    <button id="btn-1d">+1 天</button>
+    <button id="btn-reset">重置</button>
+  </div>
+
+  <!-- 卡片容器：由 JS 动态渲染 -->
+  <div class="grid" id="app"></div>
+
+<script>
+/* ============================================================
+   JS 部分
+   ------------------------------------------------------------
+   职责拆分：
+     1) 常量与工具函数（clamp / ceil 向上取整）
+     2) resolveCreatedAt —— created_at 兼容（旧数据兜底 DDL-7天）
+     3) calcProgress      —— 核心计算（总时长/剩余时长/剩余百分比/进度宽度）
+     4) buildRemainText   —— 文案智能切换（默认 / 精准 / 逾期）
+     5) resolveState      —— 颜色状态判定（normal / urgent / overdue）
+     6) renderCard        —— 渲染单张卡片 DOM
+     7) renderAll         —— 批量渲染演示任务
+     8) 事件绑定          —— 快进时间
+   ============================================================ */
+
+/* ---------- 1) 常量 ---------- */
+const HOUR_MS = 60 * 60 * 1000;      // 1 小时毫秒数
+const DAY_MS  = 24 * HOUR_MS;        // 1 天毫秒数
+const FALLBACK_LEAD_MS = 7 * DAY_MS; // 旧数据兜底：默认发布在 DDL 前 7 天
+const URGENT_PERCENT = 18;           // 紧急阈值：剩余百分比 <= 18%
+const URGENT_REMAIN_MS = 24 * HOUR_MS; // 紧急阈值：剩余 <= 24 小时
+
+/* 工具：把数值夹在 [min, max] 区间，防止越界 */
+function clamp(v, min, max) {
+  return Math.min(max, Math.max(min, v));
+}
+
+/* ---------- 2) created_at 兼容 ----------
+ * 新任务会记录 created_at；旧数据缺失时，用「DDL 时间 - 7 天」兜底。
+ * 返回毫秒时间戳。
+ */
+function resolveCreatedAt(createdAt, deadlineMs) {
+  // createdAt 可能为 null / undefined / 非法字符串
+  const t = createdAt ? new Date(createdAt).getTime() : NaN;
+  if (!Number.isNaN(t)) return t;
+  // 兜底：DDL 往前推 7 天
+  return deadlineMs - FALLBACK_LEAD_MS;
+}
+
+/* ---------- 3) 核心计算 ---------- */
+function calcProgress(createdAt, deadlineMs, nowMs) {
+  const createdMs = resolveCreatedAt(createdAt, deadlineMs);
+
+  const totalMs  = deadlineMs - createdMs; // 总时长（毫秒）
+  const remainMs = deadlineMs - nowMs;     // 剩余时长（毫秒），可为负（逾期）
+
+  // 剩余百分比 = (剩余 / 总) * 100，用于文案与紧急判断
+  let remainPercent = 100;
+  if (totalMs > 0) {
+    remainPercent = clamp((remainMs / totalMs) * 100, 0, 100);
+  }
+
+  // 进度条宽度 = ((总 - 剩余) / 总) * 100 = 已消耗比例
+  // 刚创建时 nowMs ≈ createdMs，宽度接近 0%，不会一上来就拉满
+  let barPercent = 0;
+  if (totalMs > 0) {
+    barPercent = clamp(((totalMs - remainMs) / totalMs) * 100, 0, 100);
+  }
+  // 总时长为 0（异常数据：createdAt == deadline）时：
+  // remainPercent 保持 100、barPercent 保持 0，已通过 totalMs > 0 守护，避免除零
+
+  return { totalMs, remainMs, remainPercent, barPercent };
+}
+
+/* ---------- 4) 文案智能切换 ----------
+ * 规则（按优先级）：
+ *   逾期（remainMs < 0）：
+ *     逾期 < 24h  →「已逾期 Z 小时」
+ *     逾期 >= 24h →「已逾期 X 天」
+ *   精准模式（0 <= remainMs <= 24h）→「还剩 Z 小时」
+ *   默认                      →「还剩 X 天 / 共 Y 天」
+ * 天/小时均用 Math.ceil 向上取整，防止“剩 0.9 天”被算成 0 天。
+ */
+function buildRemainText(p) {
+  const { totalMs, remainMs } = p;
+
+  if (remainMs < 0) {
+    // 逾期：取绝对值计算已超过的时长
+    const over = -remainMs;
+    if (over < DAY_MS) {
+      return `已逾期 ${Math.ceil(over / HOUR_MS)} 小时`;
+    }
+    return `已逾期 ${Math.ceil(over / DAY_MS)} 天`;
+  }
+
+  if (remainMs <= URGENT_REMAIN_MS) {
+    // 精准模式：剩余 <= 24h 且未逾期，切到小时精度
+    return `还剩 ${Math.ceil(remainMs / HOUR_MS)} 小时`;
+  }
+
+  // 默认：天精度（ceil 防止误差；totalDays 至少为 1，避免“共 0 天”）
+  const remainDays = Math.ceil(remainMs / DAY_MS);
+  const totalDays  = Math.max(1, Math.ceil(totalMs / DAY_MS));
+  return `还剩 ${remainDays} 天 / 共 ${totalDays} 天`;
+}
+
+/* ---------- 5) 颜色状态判定 ---------- */
+function resolveState(p) {
+  if (p.remainMs < 0) return 'overdue';                      // 逾期
+  if (p.remainPercent <= URGENT_PERCENT ||                   // 剩余百分比 <=18%
+      p.remainMs <= URGENT_REMAIN_MS) return 'urgent';       // 或剩余 <=24h
+  return 'normal';                                           // 正常（蓝色）
+}
+
+/* ---------- 6) 渲染单张卡片 ---------- */
+function formatDateTime(ms) {
+  const d = new Date(ms);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getMonth() + 1}月${d.getDate()}日 ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function formatDate(ms) {
+  const d = new Date(ms);
+  return `${d.getMonth() + 1}月${d.getDate()}日`;
+}
+
+function renderCard({ title, type, createdAt, deadline, note }, nowMs) {
+  const deadlineMs = deadline;
+  const p = calcProgress(createdAt, deadlineMs, nowMs);
+  const state = resolveState(p);
+
+  // 逾期：进度条强制 100% 深红；其余用真实 barPercent
+  const barWidth = state === 'overdue' ? 100 : p.barPercent;
+
+  const card = document.createElement('div');
+  card.className = `card state-${state}`;
+  card.innerHTML = `
+    <div class="card-top">
+      <span class="card-type">${type}</span>
+      <span class="card-deadline">DDL ${formatDateTime(deadlineMs)}</span>
+    </div>
+    <p class="card-title">${title}</p>
+    <p class="remain-text">${buildRemainText(p)}</p>
+    <div class="progress-track">
+      <div class="progress-fill" style="width:${barWidth}%"></div>
+    </div>
+    <div class="card-meta">创建于 ${formatDate(resolveCreatedAt(createdAt, deadlineMs))} · 进度 ${barWidth.toFixed(1)}%</div>
+    <div class="card-note">${note}</div>
+  `;
+  return card;
+}
+
+/* ---------- 7) 批量渲染演示任务 ---------- */
+function renderAll(nowMs) {
+  const app = document.getElementById('app');
+  app.innerHTML = '';
+
+  // 用「相对 now 的偏移」构造各状态，无论何时打开都能覆盖全部场景
+  const MIN = 60 * 1000;
+  const demos = [
+    { title: '正常任务：还剩 5 天',
+      type: '作业', createdAt: nowMs - 2 * DAY_MS, deadline: nowMs + 5 * DAY_MS,
+      note: '正常 · 蓝色 · 剩余 71%' },
+    { title: '刚创建的任务',
+      type: '社团', createdAt: nowMs - 1 * MIN, deadline: nowMs + 7 * DAY_MS,
+      note: '0% 极端 · 进度≈0%，不拉满' },
+    { title: '精准/紧急：还剩 20 小时',
+      type: '考试', createdAt: nowMs - 6 * DAY_MS, deadline: nowMs + 20 * HOUR_MS,
+      note: '≤24h · 红色加粗 · 切小时' },
+    { title: '紧急(百分比)：还剩 1 天',
+      type: '作业', createdAt: nowMs - 7 * DAY_MS, deadline: nowMs + 1 * DAY_MS,
+      note: '剩余 12.5%≤18% · 红色但仍是“天”文案' },
+    { title: '刚好到期',
+      type: '其他', createdAt: nowMs - 3 * DAY_MS, deadline: nowMs,
+      note: '100% 极端 · 剩余 0 · 红色' },
+    { title: '逾期 3 小时',
+      type: '作业', createdAt: nowMs - 3 * DAY_MS, deadline: nowMs - 3 * HOUR_MS,
+      note: '逾期 · 深红 · 进度条 100%' },
+    { title: '逾期 5 天',
+      type: '考试', createdAt: nowMs - 12 * DAY_MS, deadline: nowMs - 5 * DAY_MS,
+      note: '逾期 · 深红 · 切“天”文案' },
+  ];
+
+  demos.forEach((d) => app.appendChild(renderCard(d, nowMs)));
+}
+
+/* ---------- 8) 事件与初始化 ---------- */
+let nowMs = Date.now(); // 模拟的“当前时间”，快进按钮会推进它
+
+function refresh() {
+  document.getElementById('clock').textContent =
+    '模拟当前时间 ' + formatDateTime(nowMs);
+  renderAll(nowMs);
+}
+
+document.getElementById('btn-1h').addEventListener('click', () => { nowMs += HOUR_MS; refresh(); });
+document.getElementById('btn-1d').addEventListener('click', () => { nowMs += DAY_MS;  refresh(); });
+document.getElementById('btn-reset').addEventListener('click', () => { nowMs = Date.now(); refresh(); });
+
+refresh();
+</script>
+</body>
+</html>

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import dayjs from 'dayjs';
 import { MAX_DAILY_TASKS } from '../hooks/useDailySelection';
 import type { Task } from '../types';
@@ -9,6 +10,7 @@ import {
   formatDeadline,
 } from '../utils/taskDisplay';
 import { PlayIcon, StarIcon, WandIcon, XIcon } from './icons';
+import { DdlProgressBar } from './DdlProgressBar';
 
 interface TodayViewProps {
   date: string;
@@ -37,6 +39,13 @@ export function TodayView({
   onAutoSelect,
   onStartFocus,
 }: TodayViewProps) {
+  // 每 60s 刷新「当前时间」，驱动进度条与剩余文案随时间更新
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const selectedTasks: Task[] = taskIds
     .map((id) => tasks.find((task) => task.id === id))
     .filter((task): task is Task => task !== undefined);
@@ -130,6 +139,7 @@ export function TodayView({
                           <span className="text-emerald-600 dark:text-emerald-400">已完成</span>
                         )}
                       </p>
+                      <DdlProgressBar task={task} now={now} />
                     </div>
 
                     <div className="flex shrink-0 items-center gap-0.5">
@@ -242,6 +252,7 @@ export function TodayView({
                       </span>
                       <span className="tabular-nums">{formatDeadline(task.deadline)}</span>
                     </div>
+                    <DdlProgressBar task={task} now={now} />
                   </div>
 
                   <button
