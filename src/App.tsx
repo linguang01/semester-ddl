@@ -10,6 +10,7 @@ import { SubTaskSheet } from './components/SubTaskSheet';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { FocusOverlay } from './components/FocusOverlay';
 import { TodayView } from './components/TodayView';
+import { CalendarView } from './components/CalendarView';
 import { Toast, type Notify, type ToastMessage } from './components/Toast';
 import { SettingsIcon } from './components/icons';
 import {
@@ -256,14 +257,16 @@ export default function App() {
                 SEMESTER DDL
               </p>
               <h1 className="mt-0.5 text-xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">
-                {tab === 'all' ? '全部事项' : tab === 'stats' ? '统计' : '今天'}
+                {tab === 'all' ? '全部事项' : tab === 'stats' ? '统计' : tab === 'calendar' ? '日历' : '今天'}
               </h1>
               <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
                 {tab === 'all'
                   ? `共 ${tasks.length} 件 · 按 DDL 先后排序`
                   : tab === 'stats'
                     ? '图表数据来自本地存储'
-                    : dayjs(today).format('M月D日 ddd')}
+                    : tab === 'calendar'
+                      ? '点日期查看当天 DDL'
+                      : dayjs(today).format('M月D日 ddd')}
               </p>
             </div>
 
@@ -297,6 +300,14 @@ export default function App() {
             />
           ) : tab === 'stats' ? (
             <StatsView tasks={tasks} isDark={theme.isDark} />
+          ) : tab === 'calendar' ? (
+            <CalendarView
+              tasks={tasks}
+              today={today}
+              onEdit={openEdit}
+              onToggle={handleToggle}
+              onOpenSubtasks={openSubtasks}
+            />
           ) : (
             <TodayView
               date={today}

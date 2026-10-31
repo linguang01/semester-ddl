@@ -81,6 +81,22 @@ export function CalendarIcon({ className = 'h-5 w-5' }: IconProps) {
   );
 }
 
+export function ChevronLeftIcon({ className = 'h-5 w-5' }: IconProps) {
+  return (
+    <svg {...iconProps} className={className}>
+      <path d="M15 18l-6-6 6-6" />
+    </svg>
+  );
+}
+
+export function ChevronRightIcon({ className = 'h-5 w-5' }: IconProps) {
+  return (
+    <svg {...iconProps} className={className}>
+      <path d="M9 18l6-6-6-6" />
+    </svg>
+  );
+}
+
 export function WandIcon({ className = 'h-5 w-5' }: IconProps) {
   return (
     <svg {...iconProps} className={className}>

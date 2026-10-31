@@ -1,6 +1,6 @@
-import { ChartIcon, ListIcon, PlusIcon, SunIcon } from './icons';
+import { CalendarIcon, ChartIcon, ListIcon, PlusIcon, SunIcon } from './icons';
 
-export type TabKey = 'all' | 'today' | 'stats';
+export type TabKey = 'all' | 'today' | 'stats' | 'calendar';
 
 interface BottomNavProps {
   active: TabKey;
@@ -15,7 +15,7 @@ export function BottomNav({ active, onChange, onCreate }: BottomNavProps) {
       className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 shadow-[0_-4px_16px_rgba(15,23,42,0.04)] backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 dark:shadow-[0_-4px_16px_rgba(0,0,0,0.4)]"
     >
       <div
-        className="mx-auto grid max-w-md grid-cols-4"
+        className="mx-auto grid max-w-md grid-cols-5"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 20px)' }}
       >
         <button
@@ -43,6 +43,18 @@ export function BottomNav({ active, onChange, onCreate }: BottomNavProps) {
         </button>
 
         <span aria-hidden="true" className="flex h-16 items-center justify-center" />
+
+        <button
+          type="button"
+          onClick={() => onChange('calendar')}
+          aria-current={active === 'calendar' ? 'page' : undefined}
+          className={`flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium transition ${
+            active === 'calendar' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'
+          }`}
+        >
+          <CalendarIcon className="h-[22px] w-[22px]" />
+          日历
+        </button>
 
         <button
           type="button"
