@@ -8,9 +8,11 @@ import {
   TYPE_STYLE,
   formatDeadline,
   isOverdue,
+  subTaskProgress,
 } from '../utils/taskDisplay';
 import { CheckIcon } from './icons';
 import { DdlProgressBar } from './DdlProgressBar';
+import { SubTaskRing } from './SubTaskRing';
 
 type StatusFilter = 'all' | TaskStatus;
 type TypeFilter = 'all' | TaskType;
@@ -28,9 +30,11 @@ interface AllTasksViewProps {
   todayIds: string[];
   onEdit: (task: Task) => void;
   onToggle: (task: Task) => void;
+  /** 打开子任务勾选弹窗 */
+  onOpenSubtasks: (task: Task) => void;
 }
 
-export function AllTasksView({ tasks, todayIds, onEdit, onToggle }: AllTasksViewProps) {
+export function AllTasksView({ tasks, todayIds, onEdit, onToggle, onOpenSubtasks }: AllTasksViewProps) {
   const [status, setStatus] = useState<StatusFilter>('all');
   const [type, setType] = useState<TypeFilter>('all');
 
@@ -110,7 +114,7 @@ export function AllTasksView({ tasks, todayIds, onEdit, onToggle }: AllTasksView
         </div>
 
         <p className="px-1 pt-1 text-[11px] text-slate-400 dark:text-slate-500">
-          点事项可编辑或删除
+          点事项可编辑或删除；含子任务的事项点开可勾选进度
         </p>
       </section>
 
@@ -131,6 +135,7 @@ export function AllTasksView({ tasks, todayIds, onEdit, onToggle }: AllTasksView
             const done = task.status === 'done';
             const overdue = isOverdue(task);
             const isToday = todayIds.includes(task.id);
+            const hasSubTasks = subTaskProgress(task).total > 0;
 
             return (
               <li
@@ -163,7 +168,7 @@ export function AllTasksView({ tasks, todayIds, onEdit, onToggle }: AllTasksView
 
                   <button
                     type="button"
-                    onClick={() => onEdit(task)}
+                    onClick={() => (hasSubTasks ? onOpenSubtasks(task) : onEdit(task))}
                     className="min-w-0 flex-1 rounded-lg text-left"
                   >
                     <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
@@ -211,6 +216,12 @@ export function AllTasksView({ tasks, todayIds, onEdit, onToggle }: AllTasksView
                     </span>
 
                     <DdlProgressBar task={task} now={now} showPublish />
+
+                    {hasSubTasks && (
+                      <span className="mt-1.5 block">
+                        <SubTaskRing task={task} />
+                      </span>
+                    )}
                   </button>
                 </div>
               </li>

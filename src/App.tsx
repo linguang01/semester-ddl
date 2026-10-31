@@ -6,6 +6,7 @@ import { EmptyState } from './components/EmptyState';
 import { SettingsSheet } from './components/SettingsSheet';
 import { StatsView } from './components/StatsView';
 import { TaskFormSheet } from './components/TaskFormSheet';
+import { SubTaskSheet } from './components/SubTaskSheet';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { FocusOverlay } from './components/FocusOverlay';
 import { TodayView } from './components/TodayView';
@@ -28,7 +29,7 @@ import {
   sendFocusCompleteNotification,
 } from './utils/focusAlert';
 import { initDdlNotifications } from './utils/ddlNotify';
-import type { NewTaskInput, Task, TaskUpdate } from './types';
+import type { NewTaskInput, SubTask, Task, TaskUpdate } from './types';
 
 type SheetState = { mode: 'create' } | { mode: 'edit'; task: Task } | null;
 
@@ -47,6 +48,7 @@ export default function App() {
     updateTask,
     deleteTask,
     toggleTaskDone,
+    updateSubTasks,
   } = useTasks();
 
   const { taskIds, addToSelection, removeFromSelection, replaceSelection } = useDailySelection(today);
@@ -60,6 +62,8 @@ export default function App() {
   const [tab, setTab] = useState<TabKey>('today');
   const [sheet, setSheet] = useState<SheetState>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // 当前打开子任务弹窗的任务 id；存 id 而非对象，保证随 tasks 实时刷新
+  const [subTaskId, setSubTaskId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [confirmState, setConfirmState] = useState<{
     message: string;
@@ -79,8 +83,18 @@ export default function App() {
   const dismissToast = useCallback(() => setToast(null), []);
 
   const openCreate = useCallback(() => setSheet({ mode: 'create' }), []);
-  const openEdit = useCallback((task: Task) => setSheet({ mode: 'edit', task }), []);
+  // 进入编辑时同时关闭子任务弹窗，避免两层弹窗叠加
+  const openEdit = useCallback((task: Task) => {
+    setSubTaskId(null);
+    setSheet({ mode: 'edit', task });
+  }, []);
   const closeSheet = useCallback(() => setSheet(null), []);
+
+  const openSubtasks = useCallback((task: Task) => setSubTaskId(task.id), []);
+  const closeSubtasks = useCallback(() => setSubTaskId(null), []);
+
+  // 子任务弹窗的目标任务：从实时 tasks 里按 id 取，避免持有过期引用
+  const subTaskTarget = subTaskId ? tasks.find((task) => task.id === subTaskId) : undefined;
 
   const handleCreate = useCallback(
     async (input: NewTaskInput) => {
@@ -115,6 +129,18 @@ export default function App() {
       }
     },
     [toggleTaskDone, notify],
+  );
+
+  // 子任务勾选持久化：成功后不弹提示（高频操作），失败才提示
+  const handleUpdateSubTasks = useCallback(
+    async (id: string, subTasks: SubTask[]) => {
+      try {
+        await updateSubTasks(id, subTasks);
+      } catch (cause) {
+        notify(describeError(cause), 'error');
+      }
+    },
+    [updateSubTasks, notify],
   );
 
   const handleAddToToday = useCallback(
@@ -267,6 +293,7 @@ export default function App() {
               todayIds={taskIds}
               onEdit={openEdit}
               onToggle={handleToggle}
+              onOpenSubtasks={openSubtasks}
             />
           ) : tab === 'stats' ? (
             <StatsView tasks={tasks} isDark={theme.isDark} />
@@ -279,6 +306,7 @@ export default function App() {
               onRemove={handleRemoveFromToday}
               onAutoSelect={handleAutoSelect}
               onStartFocus={handleStartFocus}
+              onOpenSubtasks={openSubtasks}
             />
           )}
         </div>
@@ -293,6 +321,16 @@ export default function App() {
           onCreate={handleCreate}
           onUpdate={handleUpdate}
           onDelete={handleDelete}
+          notify={notify}
+        />
+      )}
+
+      {subTaskTarget && (
+        <SubTaskSheet
+          task={subTaskTarget}
+          onClose={closeSubtasks}
+          onUpdateSubTasks={handleUpdateSubTasks}
+          onEdit={openEdit}
           notify={notify}
         />
       )}

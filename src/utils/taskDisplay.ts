@@ -1,5 +1,5 @@
 import dayjs from 'dayjs';
-import type { Task, TaskPriority, TaskType } from '../types';
+import type { SubTask, Task, TaskPriority, TaskType } from '../types';
 
 export const TASK_TYPES: TaskType[] = ['homework', 'exam', 'club', 'other'];
 
@@ -39,4 +39,18 @@ export function formatDeadline(iso: string): string {
 /** 已过期：未完成且 DDL 早于当前时间 */
 export function isOverdue(task: Task): boolean {
   return task.status === 'todo' && dayjs(task.deadline).isBefore(dayjs());
+}
+
+/** 读取子任务（旧数据无该字段时返回空数组） */
+export function getSubTasks(task: Task): SubTask[] {
+  return task.subTasks ?? [];
+}
+
+/** 子任务进度：已完成数 / 总数 */
+export function subTaskProgress(task: Task): { completed: number; total: number } {
+  const subs = getSubTasks(task);
+  return {
+    completed: subs.filter((item) => item.isCompleted).length,
+    total: subs.length,
+  };
 }

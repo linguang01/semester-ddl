@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import dayjs from 'dayjs';
-import type { NewTaskInput, Task, TaskPriority, TaskType, TaskUpdate } from '../types';
+import type { NewTaskInput, SubTask, Task, TaskPriority, TaskType, TaskUpdate } from '../types';
 import { PRIORITY_LABEL, TASK_PRIORITIES, TASK_TYPES, TYPE_LABEL } from '../utils/taskDisplay';
 import { parseQuickAdd } from '../utils/parseQuickAdd';
 import { parseSmartInput, type SmartParseResult } from '../utils/parseSmartInput';
@@ -27,6 +27,10 @@ interface FormErrors {
 
 const INPUT_CLASS =
   'mt-1.5 h-12 w-full min-w-0 max-w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-base text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-indigo-500 dark:focus:bg-slate-800 dark:focus:ring-indigo-500/20';
+
+// 子任务输入框：不带顶部间距（供列表行内联使用），字号略小
+const SUB_INPUT_CLASS =
+  'h-12 w-full min-w-0 max-w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-indigo-500 dark:focus:bg-slate-800 dark:focus:ring-indigo-500/20';
 
 const CHIP_CLASS =
   'inline-flex items-center rounded-md bg-white px-2 py-1 text-slate-600 shadow-sm ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700';
@@ -56,6 +60,9 @@ export function TaskFormSheet({
     task?.actualHours != null ? String(task.actualHours) : '',
   );
   const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? 'medium');
+  // 子任务：编辑时回填（含完成状态），新增时为空
+  const [subTasks, setSubTasks] = useState<SubTask[]>(() => task?.subTasks ?? []);
+  const [newSubTask, setNewSubTask] = useState('');
   const [errors, setErrors] = useState<FormErrors>({});
   const [submitting, setSubmitting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -130,6 +137,22 @@ export function TaskFormSheet({
     setType(result.type);
   };
 
+  // 子任务增删改：仅维护本地状态，提交时随 payload 一并持久化
+  const addSubTask = () => {
+    const title = newSubTask.trim();
+    if (!title) return;
+    setSubTasks((prev) => [...prev, { title, isCompleted: false }]);
+    setNewSubTask('');
+  };
+
+  const updateSubTaskTitle = (index: number, title: string) => {
+    setSubTasks((prev) => prev.map((item, i) => (i === index ? { ...item, title } : item)));
+  };
+
+  const removeSubTask = (index: number) => {
+    setSubTasks((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (submitLock.current) return;
@@ -181,6 +204,7 @@ export function TaskFormSheet({
         estimatedHours: parsedHours,
         actualHours: parsedActualHours,
         priority,
+        subTasks,
       };
 
       if (task) {
@@ -445,6 +469,62 @@ export function TaskFormSheet({
                   </button>
                 );
               })}
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+              子任务（选填，把大任务拆成可勾选步骤）
+            </span>
+
+            {subTasks.length > 0 && (
+              <ul className="mt-1.5 space-y-2">
+                {subTasks.map((item, index) => (
+                  <li key={index} className="flex items-center gap-2">
+                    <input
+                      value={item.title}
+                      onChange={(event) => updateSubTaskTitle(index, event.target.value)}
+                      maxLength={60}
+                      placeholder="子任务标题"
+                      aria-label={`子任务 ${index + 1}`}
+                      className={SUB_INPUT_CLASS}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeSubTask(index)}
+                      aria-label={`删除子任务：${item.title}`}
+                      className="flex h-12 w-10 shrink-0 items-center justify-center rounded-xl text-slate-300 transition hover:bg-slate-100 hover:text-rose-500 dark:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-rose-400"
+                    >
+                      <XIcon className="h-4 w-4" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <div className="mt-1.5 flex items-center gap-2">
+              <input
+                value={newSubTask}
+                onChange={(event) => setNewSubTask(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    addSubTask();
+                  }
+                }}
+                maxLength={60}
+                placeholder="输入后回车添加子任务"
+                aria-label="新子任务标题"
+                className={SUB_INPUT_CLASS}
+              />
+              <button
+                type="button"
+                onClick={addSubTask}
+                disabled={!newSubTask.trim()}
+                className="h-12 shrink-0 rounded-xl border border-slate-200 px-3 text-xs font-medium text-slate-600 transition disabled:opacity-40 dark:border-slate-700 dark:text-slate-300"
+              >
+                添加
+              </button>
             </div>
           </div>
 

@@ -11,6 +11,8 @@ import {
 } from '../utils/taskDisplay';
 import { PlayIcon, StarIcon, WandIcon, XIcon } from './icons';
 import { DdlProgressBar } from './DdlProgressBar';
+import { SubTaskRing } from './SubTaskRing';
+import { subTaskProgress } from '../utils/taskDisplay';
 
 interface TodayViewProps {
   date: string;
@@ -23,6 +25,8 @@ interface TodayViewProps {
   onAutoSelect: () => void;
   /** 开始专注某个任务 */
   onStartFocus: (task: Task) => void;
+  /** 打开子任务勾选弹窗 */
+  onOpenSubtasks: (task: Task) => void;
 }
 
 /** 判断某任务是否为「今天内必须完成」的 DDL */
@@ -38,6 +42,7 @@ export function TodayView({
   onRemove,
   onAutoSelect,
   onStartFocus,
+  onOpenSubtasks,
 }: TodayViewProps) {
   // 每 60s 刷新「当前时间」，驱动进度条与剩余文案随时间更新
   const [now, setNow] = useState(() => new Date());
@@ -140,6 +145,15 @@ export function TodayView({
                         )}
                       </p>
                       <DdlProgressBar task={task} now={now} />
+                      {subTaskProgress(task).total > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => onOpenSubtasks(task)}
+                          className="mt-1 -ml-1 rounded-md px-1 py-0.5 text-left transition hover:bg-white dark:hover:bg-slate-900"
+                        >
+                          <SubTaskRing task={task} />
+                        </button>
+                      )}
                     </div>
 
                     <div className="flex shrink-0 items-center gap-0.5">
@@ -253,6 +267,15 @@ export function TodayView({
                       <span className="tabular-nums">{formatDeadline(task.deadline)}</span>
                     </div>
                     <DdlProgressBar task={task} now={now} />
+                    {subTaskProgress(task).total > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenSubtasks(task)}
+                        className="mt-1 -ml-1 rounded-md px-1 py-0.5 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800"
+                      >
+                        <SubTaskRing task={task} />
+                      </button>
+                    )}
                   </div>
 
                   <button

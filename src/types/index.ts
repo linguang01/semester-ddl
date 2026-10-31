@@ -7,6 +7,12 @@ export type TaskPriority = 'high' | 'medium' | 'low';
 /** 任务状态：待办 / 已完成 */
 export type TaskStatus = 'todo' | 'done';
 
+/** 子任务：隶属于某个任务，可独立勾选完成 */
+export interface SubTask {
+  title: string;
+  isCompleted: boolean;
+}
+
 export interface Task {
   /** 主键，由 crypto.randomUUID() 生成 */
   id: string;
@@ -25,6 +31,8 @@ export interface Task {
   createdAt: string;
   /** 完成时间，ISO 8601 字符串；仅 status === 'done' 时存在 */
   completedAt?: string;
+  /** 子任务列表；旧数据无此字段，读取时按空数组处理 */
+  subTasks?: SubTask[];
 }
 
 /** 新建任务时的入参：id / 状态 / 创建时间由数据层生成 */
@@ -39,13 +47,15 @@ export interface NewTaskInput {
   actualHours?: number;
   /** 默认 medium */
   priority?: TaskPriority;
+  /** 默认空数组 */
+  subTasks?: SubTask[];
 }
 
 /** 更新任务时允许修改的字段；completedAt 由 status 变化自动维护 */
 export type TaskUpdate = Partial<
   Pick<
     Task,
-    'title' | 'type' | 'course' | 'deadline' | 'estimatedHours' | 'actualHours' | 'priority' | 'status'
+    'title' | 'type' | 'course' | 'deadline' | 'estimatedHours' | 'actualHours' | 'priority' | 'status' | 'subTasks'
   >
 >;
 
