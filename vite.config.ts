@@ -30,6 +30,11 @@ export default defineConfig({
     __BUILD_GIT_HASH__: JSON.stringify(gitShortHash()),
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
   },
+  build: {
+    // 主包约 430 KB；ECharts 已懒加载进独立的 StatsView chunk（约 560 KB），
+    // 仅在首次打开「统计」tab 时下载，不阻塞首屏，因此把告警阈值提到 600 消除误报
+    chunkSizeWarningLimit: 600,
+  },
   plugins: [
     react(),
     tailwindcss(),

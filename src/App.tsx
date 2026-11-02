@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import dayjs from 'dayjs';
 import { AllTasksView } from './components/AllTasksView';
 import { BottomNav, type TabKey } from './components/BottomNav';
 import { EmptyState } from './components/EmptyState';
 import { SettingsSheet } from './components/SettingsSheet';
-import { StatsView } from './components/StatsView';
 import { TaskFormSheet } from './components/TaskFormSheet';
 import { SubTaskSheet } from './components/SubTaskSheet';
 import { ConfirmDialog } from './components/ConfirmDialog';
@@ -34,12 +33,20 @@ import type { NewTaskInput, SubTask, Task, TaskUpdate } from './types';
 
 type SheetState = { mode: 'create' } | { mode: 'edit'; task: Task } | null;
 
+// 统计页含 ECharts（体积最大），懒加载：首次切到「统计」tab 时才下载图表库，
+// 主包不包含 ECharts，首屏更快、离线预缓存更小
+const StatsView = lazy(() =>
+  import('./components/StatsView').then((module) => ({ default: module.StatsView })),
+);
+
 function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
 export default function App() {
-  const today = todayKey();
+  // today 用 state 存，而不是渲染时直接算：应用挂着跨过午夜时，定时器会更新它，
+  // 让「今日三件事」「日历」自动切到新的今天（否则会一直停留在打开时的日期）
+  const [today, setToday] = useState(todayKey);
 
   const {
     tasks,
@@ -59,6 +66,17 @@ export default function App() {
 
   // 深浅色主题：默认跟随早晚时间
   const theme = useTheme();
+
+  // 每分钟检查一次日期是否跨天；跨天则更新 today（今日三件事/日历会随之重订阅）
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setToday((prev) => {
+        const current = todayKey();
+        return prev === current ? prev : current;
+      });
+    }, 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const [tab, setTab] = useState<TabKey>('today');
   const [sheet, setSheet] = useState<SheetState>(null);
@@ -299,7 +317,15 @@ export default function App() {
               onOpenSubtasks={openSubtasks}
             />
           ) : tab === 'stats' ? (
-            <StatsView tasks={tasks} isDark={theme.isDark} />
+            <Suspense
+              fallback={
+                <p className="py-20 text-center text-xs text-slate-400 dark:text-slate-500">
+                  正在加载图表…
+                </p>
+              }
+            >
+              <StatsView tasks={tasks} isDark={theme.isDark} />
+            </Suspense>
           ) : tab === 'calendar' ? (
             <CalendarView
               tasks={tasks}
