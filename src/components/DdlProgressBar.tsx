@@ -12,10 +12,16 @@ interface DdlProgressBarProps {
 /**
  * DDL 进度条 + 剩余文案（共享组件）。
  * 「今日三件事」「待办候选」「全部任务」三处统一使用，保证显示完全一致。
- * 颜色三态：逾期深红 / 紧急红 / 正常蓝。
+ *
+ * 已完成任务：整块不渲染——倒计时、进度条、红色逾期同时消失。
+ * 完成状态由卡片上的灰色「已完成」徽标 + 灰化样式表达，避免重复信息。
+ * 未完成任务颜色三态：逾期深红 / 紧急红 / 正常蓝。
  */
 export function DdlProgressBar({ task, now, showPublish = false }: DdlProgressBarProps) {
   const p = calcDdlProgress(task, now);
+
+  // 逻辑拦截：已完成 → 直接不渲染倒计时与进度条
+  if (p.done) return null;
 
   // 文案颜色：逾期深红、紧急红、正常灰
   const textClass = p.overdue
@@ -25,15 +31,11 @@ export function DdlProgressBar({ task, now, showPublish = false }: DdlProgressBa
       : 'text-slate-400 dark:text-slate-500';
 
   // 进度条颜色：逾期深红、紧急红、正常蓝
-  const fillClass = p.overdue
-    ? 'bg-rose-700'
-    : p.urgent
-      ? 'bg-rose-500'
-      : 'bg-indigo-500';
+  const fillClass = p.overdue ? 'bg-rose-700' : p.urgent ? 'bg-rose-500' : 'bg-indigo-500';
 
   return (
     <span className="mt-1.5 block">
-      <span className="flex items-center justify-between gap-2 text-[10px] leading-4">
+      <span className="flex items-center justify-between gap-2 text-[11px] leading-4">
         {showPublish && (
           <span className="shrink-0 text-slate-400 dark:text-slate-500">
             发布 {formatPublishDate(p.createdAt)}

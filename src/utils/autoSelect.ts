@@ -1,5 +1,6 @@
 import dayjs from 'dayjs';
 import type { Task } from '../types';
+import { isTaskDone } from './taskDisplay';
 
 /** 优先级权重：数值越小越靠前（high=0 < medium=1 < low=2） */
 const PRIORITY_RANK: Record<Task['priority'], number> = {
@@ -44,7 +45,8 @@ function deadlineBucket(ms: number): number {
  *    ——「包含今天」：哪怕今天的某个时刻已过，也仍保留（如补录的今日任务）。
  */
 function isCandidate(task: Task, now: dayjs.Dayjs): boolean {
-  if (task.status !== 'todo') return false;
+  // 统一完成口径：isTaskDone 兼容 status === 'done' 与 isCompleted === true
+  if (isTaskDone(task)) return false;
   const dl = dayjs(task.deadline);
   const notExpired = !dl.isBefore(now); // deadline 未到
   const isToday = dl.isSame(now, 'day'); // deadline 落在今天

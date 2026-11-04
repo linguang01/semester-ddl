@@ -271,7 +271,7 @@ export default function App() {
         <div className="pt-page px-4">
           <header className="mb-4 flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-[10px] font-semibold tracking-[0.2em] text-indigo-500 dark:text-indigo-400">
+              <p className="text-[11px] font-semibold tracking-[0.2em] text-indigo-500 dark:text-indigo-400">
                 SEMESTER DDL
               </p>
               <h1 className="mt-0.5 text-xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">

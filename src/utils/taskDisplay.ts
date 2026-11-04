@@ -36,9 +36,19 @@ export function formatDeadline(iso: string): string {
   return dayjs(iso).format('M月D日 ddd HH:mm');
 }
 
-/** 已过期：未完成且 DDL 早于当前时间 */
+/**
+ * 任务是否已完成（统一口径）。
+ * 主数据用 status === 'done'；同时兼容外部导入/旧备份里的 isCompleted 布尔字段。
+ * 所有「倒计时 / 逾期 / 排序 / 灰化」逻辑都必须先过这道判断。
+ */
+export function isTaskDone(task: Task): boolean {
+  if (task.status === 'done') return true;
+  return (task as Task & { isCompleted?: boolean }).isCompleted === true;
+}
+
+/** 已逾期：未完成且 DDL 早于当前时间（已完成的任务永远不算逾期） */
 export function isOverdue(task: Task): boolean {
-  return task.status === 'todo' && dayjs(task.deadline).isBefore(dayjs());
+  return !isTaskDone(task) && dayjs(task.deadline).isBefore(dayjs());
 }
 
 /** 读取子任务（旧数据无该字段时返回空数组） */

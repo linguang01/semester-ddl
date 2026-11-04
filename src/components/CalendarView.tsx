@@ -7,6 +7,7 @@ import {
   TYPE_LABEL,
   TYPE_STYLE,
   isOverdue,
+  isTaskDone,
   subTaskProgress,
 } from '../utils/taskDisplay';
 import { CalendarIcon, CheckIcon, ChevronLeftIcon, ChevronRightIcon } from './icons';
@@ -202,7 +203,7 @@ export function CalendarView({ tasks, today, onEdit, onToggle, onOpenSubtasks }:
         </div>
 
         {/* 图例 */}
-        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-100 pt-3 text-[10px] text-slate-400 dark:border-slate-800 dark:text-slate-500">
+        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-100 pt-3 text-[11px] text-slate-400 dark:border-slate-800 dark:text-slate-500">
           {(Object.keys(TYPE_LABEL) as TaskType[]).map((type) => (
             <span key={type} className="flex items-center gap-1">
               <span className={`h-1.5 w-1.5 rounded-full ${TYPE_DOT[type]}`} />
@@ -233,17 +234,19 @@ export function CalendarView({ tasks, today, onEdit, onToggle, onOpenSubtasks }:
         ) : (
           <ul aria-label="当天任务" className="space-y-2">
             {selectedTasks.map((task) => {
-              const done = task.status === 'done';
+              const done = isTaskDone(task);
               const overdue = isOverdue(task);
               const hasSubTasks = subTaskProgress(task).total > 0;
 
               return (
                 <li
                   key={task.id}
-                  className={`rounded-xl border p-3 shadow-sm transition ${
-                    overdue
-                      ? 'border-rose-200 bg-rose-50 dark:border-rose-500/30 dark:bg-rose-500/10'
-                      : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'
+                  className={`rounded-xl border p-3 shadow-sm transition-opacity ${
+                    done
+                      ? 'border-slate-200 bg-slate-50 opacity-50 hover:opacity-90 dark:border-slate-800 dark:bg-slate-900/60'
+                      : overdue
+                        ? 'border-rose-200 bg-rose-50 dark:border-rose-500/30 dark:bg-rose-500/10'
+                        : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'
                   }`}
                 >
                   <div className="flex items-start gap-2">
@@ -281,16 +284,22 @@ export function CalendarView({ tasks, today, onEdit, onToggle, onOpenSubtasks }:
                         >
                           {task.title}
                         </span>
-                        {overdue && (
-                          <span className="shrink-0 rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-medium text-rose-600 dark:bg-rose-500/20 dark:text-rose-400">
-                            已过期
+                        {done ? (
+                          <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-400 dark:bg-slate-800 dark:text-slate-500">
+                            已完成
                           </span>
+                        ) : (
+                          overdue && (
+                            <span className="shrink-0 rounded bg-rose-100 px-1.5 py-0.5 text-[11px] font-medium text-rose-600 dark:bg-rose-500/20 dark:text-rose-400">
+                              已逾期
+                            </span>
+                          )
                         )}
                       </span>
 
                       <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400">
                         <span
-                          className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${TYPE_STYLE[task.type]}`}
+                          className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${TYPE_STYLE[task.type]}`}
                         >
                           {TYPE_LABEL[task.type]}
                         </span>

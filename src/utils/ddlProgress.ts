@@ -1,5 +1,6 @@
 import dayjs from 'dayjs';
 import type { Task } from '../types';
+import { isTaskDone } from './taskDisplay';
 
 /** 旧数据缺 createdAt 时，兜底为「DDL 前 7 天」 */
 const FALLBACK_LEAD_DAYS = 7;
@@ -25,11 +26,13 @@ export interface DdlProgress {
   totalMs: number;
   /** 剩余百分比 [0, 100]，用于紧急判断 */
   remainPercent: number;
-  /** 已消耗百分比（进度条宽度）[0, 100] */
+  /** 已消耗百分比（进度条宽度）[0, 100]；已完成恒为 100 */
   percent: number;
-  /** 是否已过 DDL 时刻（与任务是否完成无关） */
+  /** 是否已完成（已完成时不再计算逾期/紧急，文案改为「已完成」） */
+  done: boolean;
+  /** 是否已过 DDL 时刻（未完成的任务才可能为 true） */
   overdue: boolean;
-  /** 是否紧急（红）：未逾期且（剩余 ≤18% 或 ≤24h） */
+  /** 是否紧急（红）：未完成、未逾期且（剩余 ≤18% 或 ≤24h） */
   urgent: boolean;
 }
 
@@ -53,6 +56,7 @@ export function formatPublishDate(iso: string): string {
 
 /**
  * 剩余文案（智能切换，按优先级）：
+ * 0. 已完成 →「已完成」（拦截掉所有倒计时/逾期文案）
  * 1. 逾期（remainMs < 0）：
  *    - 逾期 < 24h  →「已逾期 Z 小时」（毫秒差 ceil）
  *    - 逾期 >= 24h →「已逾期 X 天」（自然日口径）
@@ -63,6 +67,8 @@ export function formatPublishDate(iso: string): string {
  * 避免 Math.ceil(毫秒差/天) 把「剩 1 天零 1 小时」向上取整成 2 天。
  */
 export function getRemainText(p: DdlProgress): string {
+  if (p.done) return '已完成';
+
   if (p.overdue) {
     const over = -p.remainMs;
     if (over < DAY_MS) {
@@ -83,6 +89,7 @@ export function getRemainText(p: DdlProgress): string {
  * 计算发布时间 + 剩余天数 + 进度百分比。
  *
  * 口径统一（关键）：
+ * - 已完成优先拦截：done 的任务不判逾期/紧急，percent 恒为 100。
  * - 「天」用自然日口径：两个时刻各自对齐到本地当天 00:00 后求整日差，
  *   消除时分秒、夏令时、浮点误差造成的 ±1 天偏差。
  * - 「切小时 / 紧急」用毫秒差口径：remainMs <= 24h 时强制切到小时精度。
@@ -102,6 +109,22 @@ export function calcDdlProgress(task: Task, now: Date = new Date()): DdlProgress
   // 毫秒差：剩余可为负（逾期）
   const totalMs = deadlineMs - createdAtMs;
   const remainMs = deadlineMs - nowMs;
+
+  // 逻辑拦截（关键）：已完成的任务不再计算倒计时/逾期/紧急，直接返回完成态，进度条 100%
+  if (isTaskDone(task)) {
+    return {
+      createdAt,
+      remainDays,
+      totalDays,
+      remainMs,
+      totalMs,
+      remainPercent: 100,
+      percent: 100,
+      done: true,
+      overdue: false,
+      urgent: false,
+    };
+  }
 
   // 剩余百分比（连续量），clamp 到 [0, 100]
   let remainPercent = 100;
@@ -127,6 +150,7 @@ export function calcDdlProgress(task: Task, now: Date = new Date()): DdlProgress
     totalMs,
     remainPercent,
     percent,
+    done: false,
     overdue,
     urgent,
   };

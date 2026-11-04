@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { db } from '../db/database';
 import { useDbQuery } from './useDbQuery';
 import { isDateKey } from '../utils/date';
+import { isTaskDone } from '../utils/taskDisplay';
 import type { DailySelection } from '../types';
 
 /** 每日最多选中的任务数，硬性上限 */
@@ -79,8 +80,8 @@ export function useDailySelection(activeDate: string): UseDailySelectionResult {
           throw new Error(`任务不存在：${taskId}`);
         }
 
-        // 已完成的事项不能进入今日三件事
-        if (task.status === 'done') {
+        // 已完成的事项不能进入今日三件事（isTaskDone 统一口径）
+        if (isTaskDone(task)) {
           throw new Error('已完成的事项不能加入今日三件事。');
         }
 
@@ -134,7 +135,7 @@ export function useDailySelection(activeDate: string): UseDailySelectionResult {
       const fetched = await db.tasks.bulkGet(ids);
       const validIds = ids.filter((_id, index) => {
         const task = fetched[index];
-        return task !== undefined && task.status === 'todo';
+        return task !== undefined && !isTaskDone(task);
       });
 
       // 全部无效则清空当天选择

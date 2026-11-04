@@ -8,6 +8,7 @@ import {
   TYPE_LABEL,
   TYPE_STYLE,
   formatDeadline,
+  isTaskDone,
 } from '../utils/taskDisplay';
 import { PlayIcon, StarIcon, WandIcon, XIcon } from './icons';
 import { DdlProgressBar } from './DdlProgressBar';
@@ -56,12 +57,12 @@ export function TodayView({
     .filter((task): task is Task => task !== undefined);
 
   const candidates = tasks.filter(
-    (task) => task.status === 'todo' && !taskIds.includes(task.id),
+    (task) => !isTaskDone(task) && !taskIds.includes(task.id),
   );
 
   // 特殊日：今天内必须完成的待办达到阈值（>= 3 件）时，给候选里的“今日 DDL”加星标
   const todayDdlCount = tasks.filter(
-    (task) => task.status === 'todo' && isTodayDeadline(task.deadline),
+    (task) => !isTaskDone(task) && isTodayDeadline(task.deadline),
   ).length;
   const isSpecialDay = todayDdlCount >= 3;
 
@@ -113,9 +114,11 @@ export function TodayView({
             return (
               <li
                 key={index}
-                className={`flex min-h-[56px] items-center gap-3 rounded-xl border px-3 py-2 ${
+                className={`flex min-h-[56px] items-center gap-3 rounded-xl border px-3 py-2 transition-opacity ${
                   task
-                    ? 'border-slate-200 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-800/60'
+                    ? isTaskDone(task)
+                      ? 'border-slate-200 bg-slate-50 opacity-50 hover:opacity-90 dark:border-slate-800 dark:bg-slate-900/60'
+                      : 'border-slate-200 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-800/60'
                     : 'border-dashed border-slate-200 bg-white dark:border-slate-800 dark:bg-transparent'
                 }`}
               >
@@ -125,10 +128,11 @@ export function TodayView({
 
                 {task ? (
                   <>
+                    {/* 透明度统一由外层卡片 li 控制，这里不再叠加，避免过淡看不清 */}
                     <div className="min-w-0 flex-1">
                       <p
                         className={`truncate text-sm font-medium ${
-                          task.status === 'done'
+                          isTaskDone(task)
                             ? 'text-slate-400 line-through dark:text-slate-500'
                             : 'text-slate-800 dark:text-slate-200'
                         }`}
@@ -137,11 +141,14 @@ export function TodayView({
                       </p>
                       <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-slate-400 dark:text-slate-500">
                         <span
-                          className={`h-1.5 w-1.5 shrink-0 rounded-full ${PRIORITY_DOT[task.priority]}`}
+                          className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                            isTaskDone(task) ? 'bg-slate-300 dark:bg-slate-600' : PRIORITY_DOT[task.priority]
+                          }`}
                         />
                         <span>{formatDeadline(task.deadline)}</span>
-                        {task.status === 'done' && (
-                          <span className="text-emerald-600 dark:text-emerald-400">已完成</span>
+                        {isTaskDone(task) && (
+                          /* 已完成：统一灰色，不再与红色逾期文案抢注意力 */
+                          <span className="text-slate-400 dark:text-slate-500">已完成</span>
                         )}
                       </p>
                       <DdlProgressBar task={task} now={now} />
@@ -158,7 +165,7 @@ export function TodayView({
 
                     <div className="flex shrink-0 items-center gap-0.5">
                       {/* 仅未完成的任务可进入专注 */}
-                      {task.status === 'todo' && (
+                      {!isTaskDone(task) && (
                         <button
                           type="button"
                           onClick={() => onStartFocus(task)}
@@ -254,7 +261,7 @@ export function TodayView({
                     </p>
                     <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-400 dark:text-slate-500">
                       <span
-                        className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${TYPE_STYLE[task.type]}`}
+                        className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${TYPE_STYLE[task.type]}`}
                       >
                         {TYPE_LABEL[task.type]}
                       </span>

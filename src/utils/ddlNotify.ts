@@ -1,4 +1,5 @@
 import type { Task } from '../types';
+import { isTaskDone } from './taskDisplay';
 
 // 距 DDL 多久内提醒：24 小时（毫秒）
 const DDL_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -29,7 +30,9 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
 /** 找出临近 DDL 的待办：未完成，且 0 < 剩余时间 <= 24 小时 */
 export function findDueTasks(tasks: Task[], now = Date.now()): Task[] {
   return tasks.filter((task) => {
-    if (task.status !== 'todo') return false;
+    // 与主程序统一口径：isTaskDone 同时兼容 status === 'done' 与 isCompleted === true，
+    // 避免外部导入/旧备份的已完成任务被误判成待办而弹通知
+    if (isTaskDone(task)) return false;
     const remaining = new Date(task.deadline).getTime() - now;
     return remaining > 0 && remaining <= DDL_WINDOW_MS;
   });

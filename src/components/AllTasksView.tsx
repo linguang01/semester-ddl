@@ -8,6 +8,7 @@ import {
   TYPE_STYLE,
   formatDeadline,
   isOverdue,
+  isTaskDone,
   subTaskProgress,
 } from '../utils/taskDisplay';
 import { CheckIcon } from './icons';
@@ -45,6 +46,8 @@ export function AllTasksView({ tasks, todayIds, onEdit, onToggle, onOpenSubtasks
     return () => window.clearInterval(timer);
   }, []);
 
+  // 不按完成状态重排：已完成事项留在原位（保持 deadline 升序），
+  // 只靠「灰化 + 中划线」降低视觉权重，保留「我完成了」的成就感
   const filtered = tasks.filter((task) => {
     if (status !== 'all' && task.status !== status) return false;
     if (type !== 'all' && task.type !== type) return false;
@@ -132,18 +135,22 @@ export function AllTasksView({ tasks, todayIds, onEdit, onToggle, onOpenSubtasks
       ) : (
         <ul aria-label="事项列表" className="space-y-2">
           {filtered.map((task) => {
-            const done = task.status === 'done';
-            const overdue = isOverdue(task);
+            const done = isTaskDone(task);
+            // 已完成绝不显示逾期红（isOverdue 内部已拦截，这里再做一次保险）
+            const overdue = !done && isOverdue(task);
             const isToday = todayIds.includes(task.id);
             const hasSubTasks = subTaskProgress(task).total > 0;
 
             return (
               <li
                 key={task.id}
-                className={`rounded-xl border p-3 shadow-sm transition ${
-                  overdue
-                    ? 'border-rose-200 bg-rose-50 dark:border-rose-500/30 dark:bg-rose-500/10'
-                    : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'
+                className={`rounded-xl border p-3 shadow-sm transition-opacity duration-300 ${
+                  done
+                    ? /* 已完成：极淡灰底 + 整体 0.5 透明；hover 回 0.9，方便点回来取消勾选 */
+                      'border-slate-200 bg-slate-50 opacity-50 hover:opacity-90 dark:border-slate-800 dark:bg-slate-900/60'
+                    : overdue
+                      ? 'border-rose-200 bg-rose-50 dark:border-rose-500/30 dark:bg-rose-500/10'
+                      : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'
                 }`}
               >
                 <div className="flex items-start gap-2">
@@ -181,29 +188,56 @@ export function AllTasksView({ tasks, todayIds, onEdit, onToggle, onOpenSubtasks
                       >
                         {task.title}
                       </span>
-                      {isToday && (
-                        <span className="shrink-0 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300">
+                      {isToday && !done && (
+                        <span className="shrink-0 rounded bg-indigo-100 px-1.5 py-0.5 text-[11px] font-medium text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300">
                           今日
                         </span>
                       )}
-                      {overdue && (
-                        <span className="shrink-0 rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-medium text-rose-600 dark:bg-rose-500/20 dark:text-rose-400">
-                          已过期
+                      {/* 状态徽标：已完成 → 灰色；未完成且过期 → 红色逾期 */}
+                      {done ? (
+                        <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-400 dark:bg-slate-800 dark:text-slate-500">
+                          已完成
                         </span>
+                      ) : (
+                        overdue && (
+                          <span className="shrink-0 rounded bg-rose-100 px-1.5 py-0.5 text-[11px] font-medium text-rose-600 dark:bg-rose-500/20 dark:text-rose-400">
+                            已逾期
+                          </span>
+                        )
                       )}
                     </span>
 
-                    <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400">
+                    <span
+                      className={`mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] ${
+                        done
+                          ? 'text-slate-400/70 dark:text-slate-600'
+                          : 'text-slate-500 dark:text-slate-400'
+                      }`}
+                    >
                       <span
-                        className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${TYPE_STYLE[task.type]}`}
+                        className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                          done
+                            ? 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500'
+                            : TYPE_STYLE[task.type]
+                        }`}
                       >
                         {TYPE_LABEL[task.type]}
                       </span>
                       <span className="tabular-nums">{formatDeadline(task.deadline)}</span>
                     </span>
 
-                    <span className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-slate-400 dark:text-slate-500">
-                      <span className={`h-1.5 w-1.5 rounded-full ${PRIORITY_DOT[task.priority]}`} />
+                    <span
+                      className={`mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] ${
+                        done
+                          ? 'text-slate-300 dark:text-slate-600'
+                          : 'text-slate-400 dark:text-slate-500'
+                      }`}
+                    >
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full ${
+                          done ? 'bg-slate-300 dark:bg-slate-600' : PRIORITY_DOT[task.priority]
+                        }`}
+                      />
                       <span>{PRIORITY_LABEL[task.priority]}优先级</span>
                       <span aria-hidden="true">·</span>
                       <span>{task.estimatedHours}h</span>
