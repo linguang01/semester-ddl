@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 /** 单次专注时长（秒）：36 分钟 */
 export const FOCUS_DURATION_SECONDS = 36 * 60;
@@ -18,52 +18,80 @@ export interface UseFocusTimerResult {
   stop: () => void;
 }
 
+/** 计时刷新间隔（毫秒）：500ms 保证秒数视觉上不跳格 */
+const TICK_MS = 500;
+
 /**
  * 专注倒计时逻辑。
- * 用 setInterval 每秒 -1；暂停/卸载/结束都会清理 interval（防内存泄漏）。
- * 刷新页面即重置（第一版不做后台持续计时）。
+ *
+ * 关键实现：以「结束时刻（epoch ms）」为唯一真源，每秒重算 `结束时刻 - 现在`，
+ * 而不是用 setInterval 每秒 -1。
+ * 原因：手机切后台后浏览器会节流甚至暂停定时器，-1 的写法会让 36 分钟变成一小时，
+ * 回到前台再按时间戳重算就不会漂移。
+ * 刷新页面仍会重置（不做跨会话持久化）。
  */
 export function useFocusTimer(): UseFocusTimerResult {
   const [focusTaskId, setFocusTaskId] = useState<string | null>(null);
   const [status, setStatus] = useState<FocusStatus>('idle');
   const [remainingSeconds, setRemainingSeconds] = useState(FOCUS_DURATION_SECONDS);
 
-  // 计时核心：仅 running 时挂 interval，其余状态（含暂停）都不计时。
-  // 依赖 [status]：status 变化会先清理上一个 interval，再按需挂新的，天然防重复计时。
+  // 结束时刻；仅 running 时有值，paused / idle / finished 一律为 null
+  const endAtRef = useRef<number | null>(null);
+
   useEffect(() => {
     if (status !== 'running') return;
 
-    const timer = window.setInterval(() => {
-      // 用函数式更新，避免闭包读到过期值；到 0 后不再递减
-      setRemainingSeconds((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
+    const sync = () => {
+      const endAt = endAtRef.current;
+      if (endAt === null) return;
 
-    return () => window.clearInterval(timer);
+      const left = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
+      setRemainingSeconds(left);
+
+      if (left === 0) {
+        endAtRef.current = null;
+        setStatus('finished');
+      }
+    };
+
+    // 立即同步一次：从暂停恢复、从后台切回时不用等下一个 tick
+    sync();
+
+    const timer = window.setInterval(sync, TICK_MS);
+    document.addEventListener('visibilitychange', sync);
+
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', sync);
+    };
   }, [status]);
 
-  // 归零判定：剩余秒数到 0 时切换到 finished。
-  // 放在独立 effect，避免在 setState 的 updater 里触发另一个 setState（React 禁止副作用）。
-  useEffect(() => {
-    if (status === 'running' && remainingSeconds === 0) {
-      setStatus('finished');
-    }
-  }, [status, remainingSeconds]);
-
   const start = useCallback((taskId: string) => {
+    endAtRef.current = Date.now() + FOCUS_DURATION_SECONDS * 1000;
     setFocusTaskId(taskId);
     setRemainingSeconds(FOCUS_DURATION_SECONDS);
     setStatus('running');
   }, []);
 
   const pause = useCallback(() => {
-    setStatus((prev) => (prev === 'running' ? 'paused' : prev));
+    const endAt = endAtRef.current;
+    if (endAt === null) return; // 只有 running 才有结束时刻
+
+    endAtRef.current = null;
+    const left = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
+    setRemainingSeconds(left);
+    setStatus(left === 0 ? 'finished' : 'paused');
   }, []);
 
   const resume = useCallback(() => {
-    setStatus((prev) => (prev === 'paused' ? 'running' : prev));
-  }, []);
+    if (status !== 'paused') return;
+
+    endAtRef.current = Date.now() + remainingSeconds * 1000;
+    setStatus('running');
+  }, [status, remainingSeconds]);
 
   const stop = useCallback(() => {
+    endAtRef.current = null;
     setFocusTaskId(null);
     setRemainingSeconds(FOCUS_DURATION_SECONDS);
     setStatus('idle');

@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { Task, TaskStatus, TaskType } from '../types';
+import { useNow } from '../hooks/useNow';
 import {
   PRIORITY_DOT,
   PRIORITY_LABEL,
@@ -40,16 +41,13 @@ export function AllTasksView({ tasks, todayIds, onEdit, onToggle, onOpenSubtasks
   const [type, setType] = useState<TypeFilter>('all');
 
   // 每 60s 刷新一次「当前时间」，驱动进度条与「还剩 X 天」随时间/跨天更新
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(new Date()), 60_000);
-    return () => window.clearInterval(timer);
-  }, []);
+  const now = useNow();
 
   // 不按完成状态重排：已完成事项留在原位（保持 deadline 升序），
   // 只靠「灰化 + 中划线」降低视觉权重，保留「我完成了」的成就感
+  // 筛选口径统一走 isTaskDone：兼容旧备份里只有 isCompleted 字段的数据
   const filtered = tasks.filter((task) => {
-    if (status !== 'all' && task.status !== status) return false;
+    if (status !== 'all' && isTaskDone(task) !== (status === 'done')) return false;
     if (type !== 'all' && task.type !== type) return false;
     return true;
   });

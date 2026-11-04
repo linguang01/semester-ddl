@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
-    <meta name="theme-color" content="#0f172a" />
+    <meta name="theme-color" content="#131312" />
     <script>
       // 首屏渲染前切换深浅色，避免深色模式下白屏闪烁。与 src/hooks/useTheme.ts 保持一致。
       (function () {
@@ -21,7 +21,7 @@
         }
         document.documentElement.classList.toggle('dark', dark);
         var meta = document.querySelector('meta[name="theme-color"]');
-        if (meta) meta.setAttribute('content', dark ? '#0f172a' : '#f1f5f9');
+        if (meta) meta.setAttribute('content', dark ? '#131312' : '#f7f7f5');
       })();
     </script>
     <script>

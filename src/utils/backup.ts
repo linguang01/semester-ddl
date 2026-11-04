@@ -1,11 +1,13 @@
 import dayjs from 'dayjs';
 import { db } from '../db/database';
 import { isDateKey } from './date';
-import type { DailySelection, Task, TaskPriority, TaskStatus, TaskType } from '../types';
+import type { DailySelection, SubTask, Task, TaskPriority, TaskStatus, TaskType } from '../types';
 
 export const BACKUP_APP = 'ddl-3things';
 export const BACKUP_VERSION = 1;
 export const MAX_BACKUP_BYTES = 10 * 1024 * 1024;
+/** 单个任务的子任务上限：防御异常文件写入超大数组把 IndexedDB 撑爆 */
+export const MAX_BACKUP_SUBTASKS = 100;
 
 const TASK_TYPES: TaskType[] = ['homework', 'exam', 'club', 'other'];
 const TASK_PRIORITIES: TaskPriority[] = ['high', 'medium', 'low'];
@@ -115,16 +117,43 @@ export async function downloadPreImportBackup(): Promise<void> {
   downloadJson(`导入前自动备份-${timeStamp()}.json`, createPayload(tasks, dailySelections));
 }
 
+/**
+ * 归一化子任务数组。
+ * 关键：备份必须完整保留子任务，否则「导出 → 导入」一轮下来进度环会全部消失。
+ * 脏数据（非对象、空标题）静默跳过，并截断到上限防止撑爆本地库。
+ */
+function normalizeSubTasks(raw: unknown): SubTask[] {
+  if (!Array.isArray(raw)) return [];
+
+  const list: SubTask[] = [];
+  for (const item of raw.slice(0, MAX_BACKUP_SUBTASKS)) {
+    if (!isRecord(item) || typeof item.title !== 'string') continue;
+    const title = item.title.trim();
+    if (!title) continue;
+    list.push({ title, isCompleted: item.isCompleted === true });
+  }
+  return list;
+}
+
+/** 归一化可选的小时数：非数字/负数一律视为未填写 */
+function normalizeHours(raw: unknown): number | undefined {
+  return typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 ? raw : undefined;
+}
+
 function normalizeTask(raw: unknown): Task | null {
   if (!isRecord(raw)) return null;
 
   const { id, title, deadline, status } = raw;
 
-  // 四个必填字段缺失或类型不对，整条跳过
+  // 必填字段缺失或类型不对，整条跳过
   if (typeof id !== 'string' || !id.trim()) return null;
   if (typeof title !== 'string' || !title.trim()) return null;
   if (typeof deadline !== 'string' || !isValidDate(deadline)) return null;
-  if (!TASK_STATUSES.includes(status as TaskStatus)) return null;
+  // status 可以缺失（极早期备份没有该字段），但存在时必须是合法值
+  if (status !== undefined && !TASK_STATUSES.includes(status as TaskStatus)) return null;
+
+  // 完成态统一口径：status === 'done'，或旧备份里的 isCompleted === true
+  const done = status === 'done' || raw.isCompleted === true;
 
   const type = TASK_TYPES.includes(raw.type as TaskType) ? (raw.type as TaskType) : 'other';
   const priority = TASK_PRIORITIES.includes(raw.priority as TaskPriority)
@@ -132,18 +161,14 @@ function normalizeTask(raw: unknown): Task | null {
     : 'medium';
 
   const course = typeof raw.course === 'string' ? raw.course : '';
-  const estimatedHours =
-    typeof raw.estimatedHours === 'number' &&
-    Number.isFinite(raw.estimatedHours) &&
-    raw.estimatedHours >= 0
-      ? raw.estimatedHours
-      : 0;
+  const estimatedHours = normalizeHours(raw.estimatedHours) ?? 0;
+  const actualHours = normalizeHours(raw.actualHours);
   const createdAt =
     typeof raw.createdAt === 'string' && isValidDate(raw.createdAt)
       ? raw.createdAt
       : new Date().toISOString();
   const completedAt =
-    status === 'done' && typeof raw.completedAt === 'string' && isValidDate(raw.completedAt)
+    done && typeof raw.completedAt === 'string' && isValidDate(raw.completedAt)
       ? raw.completedAt
       : undefined;
 
@@ -154,10 +179,12 @@ function normalizeTask(raw: unknown): Task | null {
     course,
     deadline: dayjs(deadline).toISOString(),
     estimatedHours,
+    ...(actualHours !== undefined ? { actualHours } : {}),
     priority,
-    status: status as TaskStatus,
+    status: done ? 'done' : 'todo',
     createdAt,
     ...(completedAt ? { completedAt } : {}),
+    subTasks: normalizeSubTasks(raw.subTasks),
   };
 }
 

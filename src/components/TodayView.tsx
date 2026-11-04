@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
 import dayjs from 'dayjs';
 import { MAX_DAILY_TASKS } from '../hooks/useDailySelection';
+import { useNow } from '../hooks/useNow';
 import type { Task } from '../types';
 import {
   PRIORITY_DOT,
@@ -30,9 +30,13 @@ interface TodayViewProps {
   onOpenSubtasks: (task: Task) => void;
 }
 
-/** 判断某任务是否为「今天内必须完成」的 DDL */
-function isTodayDeadline(deadline: string): boolean {
-  return dayjs(deadline).isSame(dayjs(), 'day');
+/**
+ * 判断某任务是否为「今天内必须完成」的 DDL。
+ * 基准必须用传入的 date（App 跨天会更新），不能直接取 dayjs()，
+ * 否则页面跨过午夜后星标会与「今天」标题对不上。
+ */
+function isSameDay(deadline: string, dateKey: string): boolean {
+  return dayjs(deadline).isSame(dayjs(dateKey), 'day');
 }
 
 export function TodayView({
@@ -46,11 +50,7 @@ export function TodayView({
   onOpenSubtasks,
 }: TodayViewProps) {
   // 每 60s 刷新「当前时间」，驱动进度条与剩余文案随时间更新
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(new Date()), 60_000);
-    return () => window.clearInterval(timer);
-  }, []);
+  const now = useNow();
 
   const selectedTasks: Task[] = taskIds
     .map((id) => tasks.find((task) => task.id === id))
@@ -62,7 +62,7 @@ export function TodayView({
 
   // 特殊日：今天内必须完成的待办达到阈值（>= 3 件）时，给候选里的“今日 DDL”加星标
   const todayDdlCount = tasks.filter(
-    (task) => !isTaskDone(task) && isTodayDeadline(task.deadline),
+    (task) => !isTaskDone(task) && isSameDay(task.deadline, date),
   ).length;
   const isSpecialDay = todayDdlCount >= 3;
 
@@ -72,6 +72,11 @@ export function TodayView({
   );
 
   const full = taskIds.length >= MAX_DAILY_TASKS;
+  // 今日三件事全部勾完：给一个收尾反馈，而不是继续显示「名额已满」的催促文案
+  const allDone =
+    selectedTasks.length > 0 &&
+    selectedTasks.length === MAX_DAILY_TASKS &&
+    selectedTasks.every(isTaskDone);
 
   return (
     <div className="space-y-4">
@@ -202,7 +207,18 @@ export function TodayView({
           </div>
         )}
 
-        {full && (
+        {allDone && (
+          <div className="mt-3 rounded-xl bg-emerald-50 px-3 py-3 text-center dark:bg-emerald-500/10">
+            <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+              今天的 {MAX_DAILY_TASKS} 件都做完了
+            </p>
+            <p className="mt-0.5 text-[11px] text-emerald-600/80 dark:text-emerald-400/80">
+              剩下的时间留给自己，别再往里塞新的了
+            </p>
+          </div>
+        )}
+
+        {full && !allDone && (
           <p className="mt-3 text-center text-[11px] text-amber-600 dark:text-amber-400">
             今日三件事最多选 3 个，做完再加
           </p>
@@ -223,7 +239,7 @@ export function TodayView({
           </p>
         )}
 
-        {full && candidates.length > 0 && (
+        {full && !allDone && candidates.length > 0 && (
           <p className="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
             名额已满：做完一件再选下一件。
           </p>
@@ -238,7 +254,7 @@ export function TodayView({
         ) : (
           <ul aria-label="待办候选" className="space-y-2">
             {sortedCandidates.map((task) => {
-              const showStar = isSpecialDay && isTodayDeadline(task.deadline);
+              const showStar = isSpecialDay && isSameDay(task.deadline, date);
 
               return (
                 <li
