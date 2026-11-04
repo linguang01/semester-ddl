@@ -16,10 +16,201 @@
   height: 0 !important;
 }
 
+/* ============================================================
+   Design Tokens（全局唯一真源）
+   原则：组件里只允许出现 token 语义名，不写死颜色/圆角/阴影。
+   ============================================================ */
+@theme {
+  /* ---------- 主色：雾霾蓝 ----------
+     低饱和 + 带灰调，用于主按钮、选中态、进度、链接。
+     100 用于浅底，500 用于实心，600 用于 hover。 */
+  --color-haze-50: #f3f6fa;
+  --color-haze-100: #e5edf5;
+  --color-haze-200: #ccdae9;
+  --color-haze-300: #a9c1d9;
+  --color-haze-400: #82a1c5;
+  --color-haze-500: #6b8aad;
+  --color-haze-600: #57738f;
+  --color-haze-700: #475e75;
+  --color-haze-800: #3c4e60;
+  --color-haze-900: #34424f;
+
+  /* ---------- 语义色 ---------- */
+  /* 页面底色 / 卡片底色 / 分隔线（暗色在 .dark 里覆盖） */
+  --color-canvas: #f7f7f5;
+  --color-surface: #ffffff;
+  --color-surface-mute: #fbfbfa;
+  --color-line: #eaeae7;
+  --color-line-strong: #dededb;
+
+  /* 警告（临期、待处理提示）：琥珀，弱于危险 */
+  --color-warn-50: #fff9ef;
+  --color-warn-100: #ffefd6;
+  --color-warn-200: #fadfae;
+  --color-warn-500: #e0a04a;
+  --color-warn-600: #c08630;
+
+  /* 危险（逾期、删除、高优）：柔化红，不用刺眼的纯红 */
+  --color-danger-50: #fdf4f3;
+  --color-danger-100: #f9e6e4;
+  --color-danger-500: #d4736a;
+  --color-danger-600: #b85c53;
+
+  /* ---------- 文字层级 ---------- */
+  --color-ink: #1f1f1d; /* 主标题 / 关键数字 */
+  --color-ink-2: #5f5e5b; /* 副标题 / 正文 */
+  --color-ink-3: #9b9a97; /* 说明 / 占位 / 时间戳 */
+  --color-ink-4: #c4c3bf; /* 禁用 */
+
+  /* ---------- 圆角 ---------- */
+  --radius-card: 20px; /* 所有卡片 */
+  --radius-field: 14px; /* 输入框 / 小按钮 */
+  --radius-chip: 999px; /* 标签 / 胶囊 */
+
+  /* 重映射内置圆角：历史 rounded-2xl 卡片直接变 20px，无需改组件 */
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-3xl: 24px;
+
+  /* ---------- 阴影：超柔和弥散，靠大范围低透明度出层次，不靠硬边 ---------- */
+  --shadow-soft:
+    0 0 0 1px rgb(15 15 15 / 0.025), 0 1px 2px rgb(15 15 15 / 0.03),
+    0 10px 28px -14px rgb(15 15 15 / 0.1);
+  --shadow-lift:
+    0 0 0 1px rgb(15 15 15 / 0.03), 0 2px 4px rgb(15 15 15 / 0.04),
+    0 18px 40px -18px rgb(15 15 15 / 0.14);
+  --shadow-float:
+    0 0 0 1px rgb(15 15 15 / 0.03), 0 8px 20px -8px rgb(15 15 15 / 0.12),
+    0 32px 64px -24px rgb(15 15 15 / 0.18);
+
+  /* 重映射内置阴影：历史 shadow-sm / shadow-lg / shadow-xl 全部走弥散版 */
+  --shadow-sm:
+    0 0 0 1px rgb(15 15 15 / 0.025), 0 1px 2px rgb(15 15 15 / 0.03),
+    0 10px 28px -14px rgb(15 15 15 / 0.1);
+  --shadow-md:
+    0 0 0 1px rgb(15 15 15 / 0.03), 0 2px 4px rgb(15 15 15 / 0.04),
+    0 14px 32px -16px rgb(15 15 15 / 0.12);
+  --shadow-lg:
+    0 0 0 1px rgb(15 15 15 / 0.03), 0 4px 10px rgb(15 15 15 / 0.04),
+    0 20px 44px -20px rgb(15 15 15 / 0.16);
+  --shadow-xl:
+    0 0 0 1px rgb(15 15 15 / 0.03), 0 8px 20px -8px rgb(15 15 15 / 0.12),
+    0 32px 64px -24px rgb(15 15 15 / 0.18);
+
+  /* ---------- 字体 ----------
+     正文与数字统一走系统无衬线栈：中文优先苹方/微软雅黑，英文走 SF/Segoe，
+     不加载任何 webfont，首屏零抖动。 */
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC',
+    'Helvetica Neue', 'Microsoft YaHei', 'Segoe UI', Roboto, 'Noto Sans SC',
+    sans-serif;
+
+  /* ---------- 字号分级（大 / 中 / 小） ----------
+     display  → 页面主数字、天数倒计时
+     title    → 卡片标题、页面标题
+     body     → 正文、任务名
+     caption  → 辅助说明、时间、标签 */
+  --text-display: 1.75rem;
+  --text-display--line-height: 1.15;
+  --text-display--letter-spacing: -0.02em;
+  --text-display--font-weight: 600;
+  --text-title: 1.0625rem;
+  --text-title--line-height: 1.4;
+  --text-title--letter-spacing: -0.01em;
+  --text-title--font-weight: 600;
+  --text-body: 0.9375rem;
+  --text-body--line-height: 1.6;
+  --text-caption: 0.8125rem;
+  --text-caption--line-height: 1.5;
+
+  /* ---------- 内置灰阶重映射（Notion 冷灰） ----------
+     App 里历史类名大量使用 slate-*，此处统一改写色值，
+     无需逐个组件改类名即可整体降噪、去掉蓝紫调。 */
+  --color-slate-50: #f7f7f5;
+  --color-slate-100: #f1f1ef;
+  --color-slate-200: #eaeae7;
+  --color-slate-300: #dededb;
+  --color-slate-400: #9b9a97;
+  --color-slate-500: #787774;
+  --color-slate-600: #5f5e5b;
+  --color-slate-700: #454440;
+  --color-slate-800: #2f2f2c;
+  --color-slate-900: #1f1f1d;
+  --color-slate-950: #161615;
+
+  /* 内置靛蓝重映射为雾霾蓝：历史 indigo-* 类名直接继承主色 */
+  --color-indigo-50: #f3f6fa;
+  --color-indigo-100: #e5edf5;
+  --color-indigo-200: #ccdae9;
+  --color-indigo-300: #a9c1d9;
+  --color-indigo-400: #82a1c5;
+  --color-indigo-500: #6b8aad;
+  --color-indigo-600: #57738f;
+  --color-indigo-700: #475e75;
+  --color-indigo-800: #3c4e60;
+  --color-indigo-900: #34424f;
+
+  /* 内置 rose/amber/emerald 降饱和：原色过艳，和雾霾蓝打架，
+     统一压到「雾面」色阶，语义不变（红=危险、橙=警告、绿=完成）。 */
+  --color-rose-50: #fdf4f3;
+  --color-rose-100: #f9e6e4;
+  --color-rose-200: #f2d2cf;
+  --color-rose-300: #e5b0ab;
+  --color-rose-400: #dc918a;
+  --color-rose-500: #d4736a;
+  --color-rose-600: #b85c53;
+  --color-rose-700: #96463f;
+
+  --color-amber-50: #fff9ef;
+  --color-amber-100: #ffefd6;
+  --color-amber-200: #fadfae;
+  --color-amber-300: #f0c87f;
+  --color-amber-400: #e8b060;
+  --color-amber-500: #e0a04a;
+  --color-amber-600: #c08630;
+
+  --color-emerald-50: #f2f8f4;
+  --color-emerald-100: #e3f0e7;
+  --color-emerald-200: #c6e0ce;
+  --color-emerald-300: #a3c9b1;
+  --color-emerald-400: #92bba2;
+  --color-emerald-500: #85a893;
+  --color-emerald-600: #6b8f78;
+}
+
+/* 暗色模式：只覆盖语义槽位，组件类名不动 */
+.dark {
+  --color-canvas: #131312;
+  --color-surface: #1c1c1a;
+  --color-surface-mute: #191918;
+  --color-line: #2b2b28;
+  --color-line-strong: #383834;
+
+  --color-ink: #f2f2ef;
+  --color-ink-2: #b9b8b3;
+  --color-ink-3: #86857f;
+  --color-ink-4: #5a5955;
+
+  --color-warn-50: #2a2113;
+  --color-warn-100: #3a2c17;
+  --color-danger-50: #2c1c1a;
+  --color-danger-100: #3c2523;
+
+  /* 暗色下阴影透明度要更低，否则脏 */
+  --shadow-soft:
+    0 0 0 1px rgb(255 255 255 / 0.04), 0 10px 28px -14px rgb(0 0 0 / 0.6);
+  --shadow-lift:
+    0 0 0 1px rgb(255 255 255 / 0.05), 0 18px 40px -18px rgb(0 0 0 / 0.7);
+  --shadow-float:
+    0 0 0 1px rgb(255 255 255 / 0.06), 0 32px 64px -24px rgb(0 0 0 / 0.8);
+}
+
 @layer base {
   html {
     -webkit-tap-highlight-color: transparent;
     color-scheme: light;
+    font-family: var(--font-sans);
   }
 
   html.dark {
@@ -33,12 +224,151 @@
   }
 
   body {
-    @apply overflow-x-hidden bg-slate-100 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100;
+    @apply overflow-x-hidden antialiased;
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    line-height: 1.6;
+    /* 数字统一等宽对齐：倒计时、进度、统计数字不跳动 */
+    font-variant-numeric: tabular-nums lining-nums;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* 标题类文字收紧字距，正文放松，避免中文块状感 */
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.01em;
+    font-weight: 600;
+    color: var(--color-ink);
   }
 
   input[type='datetime-local'],
   input[type='number'] {
     min-width: 0;
+  }
+
+  input,
+  textarea,
+  select,
+  button {
+    font-family: inherit;
+  }
+}
+
+/* ============================================================
+   语义组件层：新代码优先用这些类，不要重写一大串工具类
+   ============================================================ */
+@layer components {
+  /* 标准卡片：20px 圆角 + 弥散阴影 + 极细描边 */
+  .card {
+    border-radius: var(--radius-card);
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-line);
+    box-shadow: var(--shadow-soft);
+  }
+
+  /* 可点击卡片：hover 轻微抬升，不要缩放（缩放显廉价） */
+  .card-tap {
+    border-radius: var(--radius-card);
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-line);
+    box-shadow: var(--shadow-soft);
+    transition:
+      box-shadow 0.2s ease,
+      border-color 0.2s ease,
+      transform 0.2s ease;
+  }
+
+  .card-tap:hover {
+    box-shadow: var(--shadow-lift);
+    border-color: var(--color-line-strong);
+  }
+
+  .card-tap:active {
+    transform: translateY(1px);
+  }
+
+  /* 卡片内分隔线：比边框更淡，只做视觉分组 */
+  .card-divide > * + * {
+    border-top: 1px solid var(--color-line);
+  }
+
+  /* 输入框 / 选择器 */
+  .field {
+    border-radius: var(--radius-field);
+    background-color: var(--color-surface-mute);
+    border: 1px solid var(--color-line);
+    color: var(--color-ink);
+    transition:
+      border-color 0.18s ease,
+      box-shadow 0.18s ease,
+      background-color 0.18s ease;
+  }
+
+  .field:focus,
+  .field:focus-visible {
+    outline: none;
+    background-color: var(--color-surface);
+    border-color: var(--color-haze-400);
+    box-shadow: 0 0 0 4px rgb(107 138 173 / 0.16);
+  }
+
+  /* 主按钮：用 haze-600 而非 500 —— 白字在 500 上对比度仅 3.5:1，
+     不达 WCAG AA；600 约 4.9:1，既够暗又保留雾面质感。 */
+  .btn-primary {
+    border-radius: var(--radius-field);
+    background-color: var(--color-haze-600);
+    color: #fff;
+    font-weight: 600;
+    transition:
+      background-color 0.18s ease,
+      box-shadow 0.18s ease;
+  }
+
+  .btn-primary:hover {
+    background-color: var(--color-haze-700);
+  }
+
+  .btn-primary:active {
+    background-color: var(--color-haze-800);
+  }
+
+  /* 文字层级工具类 */
+  .t-display {
+    font-size: var(--text-display);
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    font-weight: 600;
+    color: var(--color-ink);
+  }
+
+  .t-title {
+    font-size: var(--text-title);
+    line-height: 1.4;
+    letter-spacing: -0.01em;
+    font-weight: 600;
+    color: var(--color-ink);
+  }
+
+  .t-body {
+    font-size: var(--text-body);
+    line-height: 1.6;
+    color: var(--color-ink-2);
+  }
+
+  .t-caption {
+    font-size: var(--text-caption);
+    line-height: 1.5;
+    color: var(--color-ink-3);
+  }
+
+  /* 数字强调：等宽数字 + 稍紧字距 */
+  .num {
+    font-variant-numeric: tabular-nums lining-nums;
+    letter-spacing: -0.01em;
   }
 }
 

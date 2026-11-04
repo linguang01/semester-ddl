@@ -10,27 +10,27 @@ interface StatsViewProps {
   isDark: boolean;
 }
 
-/** 饼图配色：与 TYPE_STYLE 标签色系保持一致 */
+/** 饼图配色：与 TYPE_STYLE 标签色系保持一致（低饱和版，避免图表刺眼） */
 const TYPE_COLORS: Record<TaskType, string> = {
-  homework: '#6366f1',
-  exam: '#f43f5e',
-  club: '#10b981',
-  other: '#94a3b8',
+  homework: '#6b8aad',
+  exam: '#d4736a',
+  club: '#85a893',
+  other: '#b9b8b3',
 };
 
 const CARD_CLASS =
-  'rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900';
+  'rounded-card border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900';
 
 export function StatsView({ tasks, isDark }: StatsViewProps) {
   const weekDone = useMemo(() => completedLast7Days(tasks), [tasks]);
   const typeDist = useMemo(() => typeDistribution(tasks), [tasks]);
   const weekHours = useMemo(() => hoursThisWeek(tasks), [tasks]);
 
-  // 跟随深浅色的图表文本/分割线/提示框配色
-  const axisColor = isDark ? '#94a3b8' : '#64748b';
-  const splitColor = isDark ? '#1e293b' : '#e2e8f0';
-  const tooltipBg = isDark ? '#1e293b' : '#ffffff';
-  const tooltipText = isDark ? '#e2e8f0' : '#0f172a';
+  // 跟随深浅色的图表文本/分割线/提示框配色（与 index.css 的 design tokens 同源）
+  const axisColor = isDark ? '#86857f' : '#9b9a97';
+  const splitColor = isDark ? '#2b2b28' : '#eaeae7';
+  const tooltipBg = isDark ? '#1c1c1a' : '#ffffff';
+  const tooltipText = isDark ? '#f2f2ef' : '#1f1f1d';
 
   const tooltipBase = {
     backgroundColor: tooltipBg,
@@ -65,8 +65,8 @@ export function StatsView({ tasks, isDark }: StatsViewProps) {
           smooth: true,
           symbol: 'circle',
           symbolSize: 6,
-          lineStyle: { width: 2.5, color: '#6366f1' },
-          itemStyle: { color: '#6366f1' },
+          lineStyle: { width: 2.5, color: '#6b8aad' },
+          itemStyle: { color: '#6b8aad' },
           areaStyle: {
             color: {
               type: 'linear',
@@ -75,8 +75,8 @@ export function StatsView({ tasks, isDark }: StatsViewProps) {
               x2: 0,
               y2: 1,
               colorStops: [
-                { offset: 0, color: 'rgba(99,102,241,0.22)' },
-                { offset: 1, color: 'rgba(99,102,241,0)' },
+                { offset: 0, color: 'rgba(107,138,173,0.22)' },
+                { offset: 1, color: 'rgba(107,138,173,0)' },
               ],
             },
           },
@@ -150,14 +150,14 @@ export function StatsView({ tasks, isDark }: StatsViewProps) {
           name: '预计耗时',
           data: weekHours.estimated,
           barMaxWidth: 16,
-          itemStyle: { color: '#94a3b8', borderRadius: [4, 4, 0, 0] },
+          itemStyle: { color: '#cfd6dd', borderRadius: [4, 4, 0, 0] },
         },
         {
           type: 'bar',
           name: '实际耗时',
           data: weekHours.actual,
           barMaxWidth: 16,
-          itemStyle: { color: '#10b981', borderRadius: [4, 4, 0, 0] },
+          itemStyle: { color: '#85a893', borderRadius: [4, 4, 0, 0] },
         },
       ],
     }),

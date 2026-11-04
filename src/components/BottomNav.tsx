@@ -12,7 +12,7 @@ export function BottomNav({ active, onChange, onCreate }: BottomNavProps) {
   return (
     <nav
       aria-label="底部导航"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 shadow-[0_-4px_16px_rgba(15,23,42,0.04)] backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 dark:shadow-[0_-4px_16px_rgba(0,0,0,0.4)]"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 shadow-lift backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 shadow-lift"
     >
       <div
         className="mx-auto grid max-w-md grid-cols-5"
@@ -73,7 +73,7 @@ export function BottomNav({ active, onChange, onCreate }: BottomNavProps) {
         type="button"
         onClick={onCreate}
         aria-label="新增事项"
-        className="absolute left-1/2 top-0 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-slate-900 text-white shadow-lg shadow-slate-900/25 ring-4 ring-slate-100 transition active:scale-95 dark:bg-slate-100 dark:text-slate-900 dark:shadow-slate-950/50 dark:ring-slate-950"
+        className="absolute left-1/2 top-0 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-slate-900 text-white shadow-lift ring-4 ring-slate-100 transition active:scale-95 dark:bg-slate-100 dark:text-slate-900 dark:shadow-slate-950/50 dark:ring-slate-950"
       >
         <PlusIcon className="h-6 w-6" />
       </button>
