@@ -4,6 +4,11 @@ import type { NewTaskInput, SubTask, Task, TaskPriority, TaskType, TaskUpdate } 
 import { PRIORITY_LABEL, TASK_PRIORITIES, TASK_TYPES, TYPE_LABEL } from '../utils/taskDisplay';
 import { parseQuickAdd } from '../utils/parseQuickAdd';
 import { parseSmartInput, type SmartParseResult } from '../utils/parseSmartInput';
+import {
+  DATETIME_INPUT_FORMAT,
+  deadlineAfterDays,
+  defaultNewTaskDeadline,
+} from '../utils/date';
 import { ConfirmDialog } from './ConfirmDialog';
 import type { Notify } from './Toast';
 import { WandIcon, XIcon } from './icons';
@@ -35,6 +40,19 @@ const SUB_INPUT_CLASS =
 const CHIP_CLASS =
   'inline-flex items-center rounded-md bg-white px-2 py-1 text-slate-600 shadow-sm ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700';
 
+/** 快捷天数按钮：今天 +N 天的 16:30 */
+const QUICK_DAY_OPTIONS = [1, 3, 7] as const;
+
+/** 自定义天数允许范围（下限 1 天，避免落到「今天 16:30 已过」的过去时间） */
+const CUSTOM_DAYS_MIN = 1;
+const CUSTOM_DAYS_MAX = 365;
+
+/** 快捷按钮 / 天数输入框的统一样式 */
+const QUICK_BTN_CLASS = 'h-10 rounded-xl text-xs font-medium transition active:scale-[0.98] disabled:opacity-40';
+
+const DAYS_INPUT_CLASS =
+  'h-10 w-full min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-indigo-500 dark:focus:bg-slate-800 dark:focus:ring-indigo-500/20';
+
 export function TaskFormSheet({
   task,
   onClose,
@@ -51,10 +69,16 @@ export function TaskFormSheet({
   const [course, setCourse] = useState(task?.course ?? '');
   const [deadline, setDeadline] = useState(
     task
-      ? dayjs(task.deadline).format('YYYY-MM-DDTHH:mm')
-      // 新增任务默认「今天 23:59」，与快速解析「未识别到时间就默认今天」保持一致
-      : dayjs().hour(23).minute(59).second(0).format('YYYY-MM-DDTHH:mm'),
+      ? dayjs(task.deadline).format(DATETIME_INPUT_FORMAT)
+      // 新增任务默认「今天 16:30」；今天 16:30 已过则顺延到明天 16:30
+      : defaultNewTaskDeadline().format(DATETIME_INPUT_FORMAT),
   );
+  // 自定义天数输入框（回车 / 点确认生效）
+  const [customDays, setCustomDays] = useState('');
+  const [daysError, setDaysError] = useState<string | undefined>(undefined);
+  // 最近一次快捷选择（用于标题解析覆盖时给提示）
+  const [quickPickLabel, setQuickPickLabel] = useState<string | null>(null);
+  const [overrideNotice, setOverrideNotice] = useState<string | null>(null);
   const [hours, setHours] = useState(task ? String(task.estimatedHours) : '1');
   const [actualHours, setActualHours] = useState(
     task?.actualHours != null ? String(task.actualHours) : '',
@@ -96,16 +120,67 @@ export function TaskFormSheet({
   const deadlineIsPast = parsedDeadline.isValid() && !parsedDeadline.isAfter(dayjs());
   const showHistoricalHint = isEditingDone && deadlineIsPast && !errors.deadline;
 
+  // 当前选中的日期是否正好等于「今天 + N 天 16:30」，用于高亮快捷按钮
+  const activeQuickDay = QUICK_DAY_OPTIONS.find(
+    (days) => deadlineAfterDays(days).format(DATETIME_INPUT_FORMAT) === deadline,
+  );
+
+  /** 统一写回 DDL；顺手清掉「必须是未来时间」的旧报错，避免改完还挂着红字 */
+  const applyDeadline = (value: string) => {
+    setDeadline(value);
+    setErrors((prev) => {
+      if (!prev.deadline) return prev;
+      const next = { ...prev };
+      delete next.deadline;
+      return next;
+    });
+  };
+
+  /** 快捷天数：今天 + days 天，时刻强制 16:30；label 用于标题解析覆盖时提示用户 */
+  const applyDeadlineAfterDays = (days: number, label = `+${days}天`) => {
+    applyDeadline(deadlineAfterDays(days).format(DATETIME_INPUT_FORMAT));
+    setDaysError(undefined);
+    setQuickPickLabel(label);
+    setOverrideNotice(null);
+  };
+
+  /** 自定义天数确认：只接受 1~365 的正整数 */
+  const handleCustomDaysConfirm = () => {
+    const text = customDays.trim();
+    if (!text) {
+      setDaysError('请输入天数');
+      return;
+    }
+    if (!/^\d+$/.test(text)) {
+      setDaysError('天数必须是正整数');
+      return;
+    }
+    const days = Number(text);
+    if (days < CUSTOM_DAYS_MIN || days > CUSTOM_DAYS_MAX) {
+      setDaysError(`天数需在 ${CUSTOM_DAYS_MIN}~${CUSTOM_DAYS_MAX} 之间`);
+      return;
+    }
+    applyDeadlineAfterDays(days, `+${days}天`);
+  };
+
   // 标题输入：新增任务时做自然语言解析
   const handleTitleChange = (event: ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
     setTitle(value);
     // 仅新增任务启用快速解析；编辑时保持标题与时间独立，避免误改已有 DDL
     if (isEditing) return;
+
     const result = parseQuickAdd(value);
     // 只有真正识别到日期/时间才回填截止时间，否则保留用户手动选择或默认值
-    if (result.hasDate || result.hasTime) {
-      setDeadline(dayjs(result.deadline).format('YYYY-MM-DDTHH:mm'));
+    if (!result.hasDate && !result.hasTime) return;
+
+    const next = dayjs(result.deadline).format(DATETIME_INPUT_FORMAT);
+    setDeadline(next);
+
+    // 标题解析优先级最高：刚用过快捷按钮就被覆盖时，明确告知，避免用户以为按钮失灵
+    if (quickPickLabel) {
+      setOverrideNotice(`检测到标题包含时间，已覆盖快捷选择「${quickPickLabel}」`);
+      setQuickPickLabel(null);
     }
   };
 
@@ -130,7 +205,7 @@ export function TaskFormSheet({
 
     // 回填各字段；标题为空时不动标题，避免误清空
     if (result.title) setTitle(result.title);
-    setDeadline(dayjs(result.deadline).format('YYYY-MM-DDTHH:mm'));
+    setDeadline(dayjs(result.deadline).format(DATETIME_INPUT_FORMAT));
     setCourse(result.course);
     setHours(String(result.estimatedHours));
     setPriority(result.priority);
@@ -385,11 +460,87 @@ export function TaskFormSheet({
               id="task-deadline"
               type="datetime-local"
               value={deadline}
-              onChange={(event) => setDeadline(event.target.value)}
+              onChange={(event) => {
+                // 手动改时间：清掉快捷选择的记忆，避免后面误报「已覆盖」
+                setDeadline(event.target.value);
+                setQuickPickLabel(null);
+                setOverrideNotice(null);
+              }}
               min={isEditingDone ? undefined : dayjs().format('YYYY-MM-DDTHH:mm')}
               className={`${INPUT_CLASS} appearance-none`}
             />
           </label>
+
+          {/* 快捷截止时间：今天 +N 天的 16:30 */}
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            {QUICK_DAY_OPTIONS.map((days) => {
+              const active = activeQuickDay === days;
+              return (
+                <button
+                  key={days}
+                  type="button"
+                  onClick={() => applyDeadlineAfterDays(days)}
+                  aria-pressed={active}
+                  aria-label={`截止时间设为今天加 ${days} 天的 16:30`}
+                  className={`${QUICK_BTN_CLASS} border ${
+                    active
+                      ? 'border-slate-900 bg-slate-900 text-white shadow-sm dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-600'
+                  }`}
+                >
+                  +{days}天
+                </button>
+              );
+            })}
+          </div>
+
+          {/* 自定义天数：回车或点确认，统一算成「今天 +N 天 16:30」 */}
+          <div className="mt-2 flex items-center gap-2">
+            <input
+              id="task-custom-days"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={3}
+              value={customDays}
+              onChange={(event) => {
+                // 只保留数字，手机上直接弹数字键盘，也省掉一半校验
+                setCustomDays(event.target.value.replace(/\D/g, ''));
+                setDaysError(undefined);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  // 关键：阻止回车触发外层 form 提交
+                  event.preventDefault();
+                  handleCustomDaysConfirm();
+                }
+              }}
+              placeholder="输入天数(如6)"
+              aria-label="自定义截止天数"
+              aria-invalid={Boolean(daysError)}
+              className={DAYS_INPUT_CLASS}
+            />
+            <button
+              type="button"
+              onClick={handleCustomDaysConfirm}
+              disabled={!customDays.trim()}
+              className={`${QUICK_BTN_CLASS} shrink-0 border border-slate-200 px-3 text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:text-slate-300 dark:hover:border-slate-600`}
+            >
+              确认
+            </button>
+          </div>
+          {daysError && <p className="mt-1 text-[11px] text-rose-600">{daysError}</p>}
+          {overrideNotice && (
+            <p
+              role="status"
+              className="mt-1.5 rounded-lg bg-amber-50 px-2.5 py-2 text-[11px] leading-relaxed text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"
+            >
+              {overrideNotice}
+            </p>
+          )}
+          <p className="mt-1.5 text-[11px] text-slate-400 dark:text-slate-500">
+            快捷设置一律取「今天 + N 天」的 16:30，会覆盖上方手动选择的时间。
+          </p>
           {errors.deadline && (
             <p className="mt-1 text-[11px] text-rose-600">{errors.deadline}</p>
           )}

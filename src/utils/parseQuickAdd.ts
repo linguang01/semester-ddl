@@ -1,4 +1,5 @@
 import dayjs from 'dayjs';
+import { atDefaultDeadline } from './date';
 
 /**
  * 快速添加（Quick Add）自然语言解析（纯正则 + dayjs，无 eval / new Function）。
@@ -10,7 +11,7 @@ import dayjs from 'dayjs';
  * - 时间：HH:MM、X点、X点半、X点Y分（阿拉伯数字 + 中文数字均可），
  *         可带时段前缀（上午/下午/晚上/凌晨/中午等）
  *
- * 未识别到日期 → 默认今天；未识别到时间 → 默认 23:59。
+ * 未识别到日期 → 默认今天；未识别到时间 → 默认 16:30。
  * 例如：「明天下午3点交高数作业」→ 明天 15:00，标题「高数作业」；
  *       「后天下午三点开会」   → 后天 15:00，标题「开会」。
  */
@@ -229,8 +230,8 @@ export function parseQuickAdd(input: string, now: Date = new Date()): QuickAddRe
 
   let hasDate = false;
   let hasTime = false;
-  // 默认今天 23:59，之后逐项覆盖
-  let deadline = startOfToday.hour(23).minute(59).second(0).millisecond(0);
+  // 默认今天 16:30，之后逐项覆盖
+  let deadline = atDefaultDeadline(startOfToday);
   let rest = normalized;
 
   // 1) 解析日期：取第一个命中的关键词
@@ -239,7 +240,7 @@ export function parseQuickAdd(input: string, now: Date = new Date()): QuickAddRe
     const date = resolveDate(dateMatch[0], startOfToday);
     if (date) {
       hasDate = true;
-      deadline = date.hour(23).minute(59).second(0).millisecond(0);
+      deadline = atDefaultDeadline(date);
     }
     rest = rest.replace(dateMatch[0], ' ');
   }
