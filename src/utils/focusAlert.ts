@@ -1,3 +1,5 @@
+import { showSystemNotification } from './ddlNotify';
+
 /**
  * 专注结束的提示音 + 系统通知。
  * 全部 best-effort：任何失败（无权限、浏览器不支持）都不阻塞主流程。
@@ -36,6 +38,15 @@ export function requestNotificationPermission(): void {
   }
 }
 
+/** 在“开始专注”的用户手势中解锁音频，移动浏览器才允许结束时播放。 */
+export function prepareFocusAudio(): void {
+  const ctx = getAudioContext();
+  if (!ctx || ctx.state === 'running') return;
+  void ctx.resume().catch(() => {
+    // 不支持或被策略阻止时，结束时再尝试一次
+  });
+}
+
 /** 播放一段简单的上行提示音（Web Audio 合成，无需音频资源文件）。 */
 export function playFocusCompleteSound(): void {
   const ctx = getAudioContext();
@@ -64,22 +75,20 @@ export function playFocusCompleteSound(): void {
         osc.start(startAt);
         osc.stop(startAt + 0.18);
       });
+    }).catch(() => {
+      // 自动播放策略阻止时静默跳过
     });
   } catch {
     /* ignore */
   }
 }
 
-/** 发送系统通知（需已授权，否则静默跳过）。 */
-export function sendFocusCompleteNotification(): void {
-  try {
-    if (!('Notification' in window)) return;
-    if (Notification.permission !== 'granted') return;
-    new Notification('专注结束', {
-      body: '专注结束，快起来喝口水、看看窗外休息 6 分钟吧！',
-      tag: 'focus-complete',
-    });
-  } catch {
-    /* ignore */
-  }
+/** 发送系统通知（需已授权，否则静默跳过）；优先走 SW，兼容移动浏览器。 */
+export async function sendFocusCompleteNotification(): Promise<void> {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  await showSystemNotification(
+    '专注结束',
+    '专注结束，快起来喝口水、看看窗外休息 6 分钟吧！',
+    'focus-complete',
+  );
 }

@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { Task, TaskType } from '../types';
+import { useNow } from '../hooks/useNow';
 import { buildMonthGrid, toDateKey } from '../utils/monthGrid';
 import {
   PRIORITY_DOT,
@@ -49,7 +50,15 @@ function formatDateLabel(key: string): string {
   return `${m}月${d}日 周${WEEKDAY_LABELS[weekday]}`;
 }
 
-export function CalendarView({ tasks, today, onEdit, onToggle, onOpenSubtasks }: CalendarViewProps) {
+export const CalendarView = memo(function CalendarView({
+  tasks,
+  today,
+  onEdit,
+  onToggle,
+  onOpenSubtasks,
+}: CalendarViewProps) {
+  const now = useNow();
+
   // 当前展示的月份（cursor 用 {year, month} 表示，month 为 0-based）
   const todayDate = useMemo(() => {
     const [y, m] = today.split('-').map(Number);
@@ -62,6 +71,17 @@ export function CalendarView({ tasks, today, onEdit, onToggle, onOpenSubtasks }:
 
   // 选中的日期键，默认今天
   const [selectedKey, setSelectedKey] = useState(today);
+  const previousTodayRef = useRef(today);
+
+  // 页面跨过午夜后，如果用户仍停在「旧今天」，同步选中今天与月份。
+  useEffect(() => {
+    const previousToday = previousTodayRef.current;
+    previousTodayRef.current = today;
+    if (selectedKey !== previousToday) return;
+
+    setSelectedKey(today);
+    setCursor({ year: todayDate.getFullYear(), month: todayDate.getMonth() });
+  }, [selectedKey, today, todayDate]);
 
   // 把全部任务按「本地时区的 DDL 日期」分组，方便月历格子直接查
   const tasksByDate = useMemo(() => {
@@ -235,7 +255,7 @@ export function CalendarView({ tasks, today, onEdit, onToggle, onOpenSubtasks }:
           <ul aria-label="当天任务" className="space-y-2">
             {selectedTasks.map((task) => {
               const done = isTaskDone(task);
-              const overdue = isOverdue(task);
+              const overdue = isOverdue(task, now);
               const hasSubTasks = subTaskProgress(task).total > 0;
 
               return (
@@ -327,4 +347,4 @@ export function CalendarView({ tasks, today, onEdit, onToggle, onOpenSubtasks }:
       </section>
     </div>
   );
-}
+});

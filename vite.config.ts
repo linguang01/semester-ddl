@@ -34,6 +34,35 @@ export default defineConfig({
     // 主包约 430 KB；ECharts 已懒加载进独立的 StatsView chunk（约 560 KB），
     // 仅在首次打开「统计」tab 时下载，不阻塞首屏，因此把告警阈值提到 600 消除误报
     chunkSizeWarningLimit: 600,
+    rolldownOptions: {
+      output: {
+        // 第三方依赖拆成稳定 vendor 块：业务代码更新时缓存仍可复用，也避免单块过大。
+        codeSplitting: {
+          groups: [
+            {
+              name: 'react-vendor',
+              test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/,
+              priority: 40,
+            },
+            {
+              name: 'supabase-vendor',
+              test: /node_modules[\\/]@supabase[\\/]/,
+              priority: 30,
+            },
+            {
+              name: 'data-vendor',
+              test: /node_modules[\\/](dexie|dayjs|workbox-[^\\/]+)[\\/]/,
+              priority: 20,
+            },
+            {
+              name: 'chart-vendor',
+              test: /node_modules[\\/](echarts|zrender)[\\/]/,
+              priority: 10,
+            },
+          ],
+        },
+      },
+    },
   },
   plugins: [
     react(),

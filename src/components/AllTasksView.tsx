@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import type { Task, TaskStatus, TaskType } from '../types';
 import { useNow } from '../hooks/useNow';
 import {
@@ -36,7 +36,13 @@ interface AllTasksViewProps {
   onOpenSubtasks: (task: Task) => void;
 }
 
-export function AllTasksView({ tasks, todayIds, onEdit, onToggle, onOpenSubtasks }: AllTasksViewProps) {
+export const AllTasksView = memo(function AllTasksView({
+  tasks,
+  todayIds,
+  onEdit,
+  onToggle,
+  onOpenSubtasks,
+}: AllTasksViewProps) {
   const [status, setStatus] = useState<StatusFilter>('all');
   const [type, setType] = useState<TypeFilter>('all');
 
@@ -46,11 +52,16 @@ export function AllTasksView({ tasks, todayIds, onEdit, onToggle, onOpenSubtasks
   // 不按完成状态重排：已完成事项留在原位（保持 deadline 升序），
   // 只靠「灰化 + 中划线」降低视觉权重，保留「我完成了」的成就感
   // 筛选口径统一走 isTaskDone：兼容旧备份里只有 isCompleted 字段的数据
-  const filtered = tasks.filter((task) => {
-    if (status !== 'all' && isTaskDone(task) !== (status === 'done')) return false;
-    if (type !== 'all' && task.type !== type) return false;
-    return true;
-  });
+  const filtered = useMemo(
+    () =>
+      tasks.filter((task) => {
+        if (status !== 'all' && isTaskDone(task) !== (status === 'done')) return false;
+        if (type !== 'all' && task.type !== type) return false;
+        return true;
+      }),
+    [status, tasks, type],
+  );
+  const todayIdSet = useMemo(() => new Set(todayIds), [todayIds]);
 
   const resetFilters = () => {
     setStatus('all');
@@ -136,7 +147,7 @@ export function AllTasksView({ tasks, todayIds, onEdit, onToggle, onOpenSubtasks
             const done = isTaskDone(task);
             // 已完成绝不显示逾期红（isOverdue 内部已拦截，这里再做一次保险）
             const overdue = !done && isOverdue(task);
-            const isToday = todayIds.includes(task.id);
+            const isToday = todayIdSet.has(task.id);
             const hasSubTasks = subTaskProgress(task).total > 0;
 
             return (
@@ -263,4 +274,4 @@ export function AllTasksView({ tasks, todayIds, onEdit, onToggle, onOpenSubtasks
       )}
     </div>
   );
-}
+});

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useDialog } from '../hooks/useDialog';
 import { FOCUS_DURATION_SECONDS, type FocusStatus } from '../hooks/useFocusTimer';
 import { PauseIcon, PlayIcon, StopIcon } from './icons';
 
@@ -26,15 +26,7 @@ export function FocusOverlay({
   onResume,
   onStop,
 }: FocusOverlayProps) {
-  // 打开时锁定背景滚动
-  useEffect(() => {
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = previous;
-    };
-  }, []);
-
+  const dialogRef = useDialog(undefined, { closeOnEscape: false });
   const finished = status === 'finished';
   const progress = remainingSeconds / FOCUS_DURATION_SECONDS;
 
@@ -42,7 +34,14 @@ export function FocusOverlay({
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-6">
       <div className="overlay-fade absolute inset-0 bg-slate-950/70 backdrop-blur-md" />
 
-      <div className="pop-enter relative w-full max-w-sm rounded-3xl bg-white p-6 text-center shadow-2xl dark:bg-slate-900">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={finished ? '专注结束' : '专注计时'}
+        tabIndex={-1}
+        className="pop-enter relative w-full max-w-sm rounded-3xl bg-white p-6 text-center shadow-2xl outline-none dark:bg-slate-900"
+      >
         {finished ? (
           <>
             <div className="text-5xl leading-none">🎉</div>

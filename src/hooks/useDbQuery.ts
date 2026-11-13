@@ -1,4 +1,4 @@
-import { useEffect, useState, type DependencyList } from 'react';
+import { useEffect, useRef, useState, type DependencyList } from 'react';
 import { liveQuery } from 'dexie';
 
 interface DbQueryState<T> {
@@ -20,8 +20,12 @@ export function useDbQuery<T>(
   const [value, setValue] = useState<T>(initialValue);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const initialValueRef = useRef(initialValue);
 
   useEffect(() => {
+    // 切换查询键（例如跨天后的日期）时先清空旧值，避免把昨日选择当今日使用。
+    setValue(initialValueRef.current);
+    setError(null);
     setLoading(true);
 
     const subscription = liveQuery(querier).subscribe({

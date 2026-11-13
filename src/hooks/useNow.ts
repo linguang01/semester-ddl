@@ -12,16 +12,16 @@ export function useNow(intervalMs = 60_000): Date {
 
   useEffect(() => {
     const tick = () => setNow(new Date());
-
-    const timer = window.setInterval(() => {
+    const tickWhenVisible = () => {
       if (document.visibilityState === 'visible') tick();
-    }, intervalMs);
+    };
 
-    document.addEventListener('visibilitychange', tick);
+    const timer = window.setInterval(tickWhenVisible, intervalMs);
+    document.addEventListener('visibilitychange', tickWhenVisible);
 
     return () => {
       window.clearInterval(timer);
-      document.removeEventListener('visibilitychange', tick);
+      document.removeEventListener('visibilitychange', tickWhenVisible);
     };
   }, [intervalMs]);
 

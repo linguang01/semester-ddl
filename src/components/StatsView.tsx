@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import dayjs from 'dayjs';
 import type { EChartsCoreOption } from 'echarts/core';
 import type { Task, TaskType } from '../types';
 import { completedLast7Days, hoursThisWeek, typeDistribution } from '../utils/stats';
@@ -8,6 +9,8 @@ import { EChart } from './EChart';
 interface StatsViewProps {
   tasks: Task[];
   isDark: boolean;
+  /** YYYY-MM-DD，跨午夜时驱动 7 天/本周统计重算 */
+  today: string;
 }
 
 /** 饼图配色：与 TYPE_STYLE 标签色系保持一致（低饱和版，避免图表刺眼） */
@@ -21,10 +24,10 @@ const TYPE_COLORS: Record<TaskType, string> = {
 const CARD_CLASS =
   'rounded-card border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900';
 
-export function StatsView({ tasks, isDark }: StatsViewProps) {
-  const weekDone = useMemo(() => completedLast7Days(tasks), [tasks]);
+export function StatsView({ tasks, isDark, today }: StatsViewProps) {
+  const weekDone = useMemo(() => completedLast7Days(tasks, dayjs(today)), [tasks, today]);
   const typeDist = useMemo(() => typeDistribution(tasks), [tasks]);
-  const weekHours = useMemo(() => hoursThisWeek(tasks), [tasks]);
+  const weekHours = useMemo(() => hoursThisWeek(tasks, dayjs(today)), [tasks, today]);
 
   // 跟随深浅色的图表文本/分割线/提示框配色（与 index.css 的 design tokens 同源）
   const axisColor = isDark ? '#86857f' : '#9b9a97';

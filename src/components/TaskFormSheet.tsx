@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import dayjs from 'dayjs';
+import { useDialog } from '../hooks/useDialog';
 import type { NewTaskInput, SubTask, Task, TaskPriority, TaskType, TaskUpdate } from '../types';
 import { PRIORITY_LABEL, TASK_PRIORITIES, TASK_TYPES, TYPE_LABEL } from '../utils/taskDisplay';
-import { parseQuickAdd } from '../utils/parseQuickAdd';
-import { parseSmartInput, type SmartParseResult } from '../utils/parseSmartInput';
+import { parseDateTime } from '../utils/parseDateTime';
+import { parseTaskText, type TaskTextParseResult } from '../utils/parseTaskText';
+import { describeError } from '../utils/error';
 import {
   DATETIME_INPUT_FORMAT,
   deadlineAfterDays,
@@ -92,29 +94,13 @@ export function TaskFormSheet({
   const [confirmDelete, setConfirmDelete] = useState(false);
   // 智能录入：原始输入 + 解析结果预览
   const [smartText, setSmartText] = useState('');
-  const [smartPreview, setSmartPreview] = useState<SmartParseResult | null>(null);
+  const [smartPreview, setSmartPreview] = useState<TaskTextParseResult | null>(null);
 
   const submitLock = useRef(false);
-
-  // 打开时锁定背景滚动
-  useEffect(() => {
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = previous;
-    };
-  }, []);
-
-  // Esc 关闭（提交中不响应）
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !submitLock.current) {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
+  // Esc 关闭（提交中不响应），滚动锁与焦点圈定由统一弹窗 Hook 处理。
+  const dialogRef = useDialog(() => {
+    if (!submitLock.current) onClose();
+  });
 
   const parsedDeadline = dayjs(deadline);
   const deadlineIsPast = parsedDeadline.isValid() && !parsedDeadline.isAfter(dayjs());
@@ -170,7 +156,7 @@ export function TaskFormSheet({
     // 仅新增任务启用快速解析；编辑时保持标题与时间独立，避免误改已有 DDL
     if (isEditing) return;
 
-    const result = parseQuickAdd(value);
+    const result = parseDateTime(value);
     // 只有真正识别到日期/时间才回填截止时间，否则保留用户手动选择或默认值
     if (!result.hasDate && !result.hasTime) return;
 
@@ -187,7 +173,7 @@ export function TaskFormSheet({
   // 标题失焦：剥离日期/时间片段，把干净的任务名回填到标题框
   const handleTitleBlur = () => {
     if (isEditing) return;
-    setTitle(parseQuickAdd(title).title);
+    setTitle(parseDateTime(title).title);
   };
 
   // 智能录入：一句话解析并回填整个表单（仅新增任务启用）
@@ -200,12 +186,15 @@ export function TaskFormSheet({
       return;
     }
 
-    const result = parseSmartInput(value);
+    const result = parseTaskText(value);
     setSmartPreview(result);
 
     // 回填各字段；标题为空时不动标题，避免误清空
     if (result.title) setTitle(result.title);
-    setDeadline(dayjs(result.deadline).format(DATETIME_INPUT_FORMAT));
+    // 只有识别到日期/时间才覆盖 DDL；否则保留用户手动选择或快捷按钮结果。
+    if (result.hasDate || result.hasTime) {
+      setDeadline(dayjs(result.deadline).format(DATETIME_INPUT_FORMAT));
+    }
     setCourse(result.course);
     setHours(String(result.estimatedHours));
     setPriority(result.priority);
@@ -233,7 +222,7 @@ export function TaskFormSheet({
     if (submitLock.current) return;
 
     // 新增任务：提交前再解析一次，兜底剥离标题里残留的日期/时间片段
-    const finalTitle = isEditing ? title.trim() : parseQuickAdd(title).title;
+    const finalTitle = isEditing ? title.trim() : parseDateTime(title).title;
 
     const nextErrors: FormErrors = {};
 
@@ -294,7 +283,7 @@ export function TaskFormSheet({
     } catch (error) {
       submitLock.current = false;
       setSubmitting(false);
-      notify(error instanceof Error ? error.message : String(error), 'error');
+      notify(describeError(error), 'error');
     }
   };
 
@@ -318,7 +307,7 @@ export function TaskFormSheet({
     } catch (error) {
       submitLock.current = false;
       setSubmitting(false);
-      notify(error instanceof Error ? error.message : String(error), 'error');
+      notify(describeError(error), 'error');
     }
   };
 
@@ -335,10 +324,12 @@ export function TaskFormSheet({
       />
 
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="task-form-title"
-        className="sheet-enter relative max-h-[92dvh] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-2xl bg-white px-4 pt-3 shadow-2xl dark:bg-slate-900"
+        tabIndex={-1}
+        className="sheet-enter relative max-h-[92dvh] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-2xl bg-white px-4 pt-3 shadow-2xl outline-none dark:bg-slate-900"
         style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 20px))' }}
       >
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-slate-200 dark:bg-slate-700" />
@@ -466,7 +457,6 @@ export function TaskFormSheet({
                 setQuickPickLabel(null);
                 setOverrideNotice(null);
               }}
-              min={isEditingDone ? undefined : dayjs().format('YYYY-MM-DDTHH:mm')}
               className={`${INPUT_CLASS} appearance-none`}
             />
           </label>

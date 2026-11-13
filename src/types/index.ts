@@ -33,6 +33,13 @@ export interface Task {
   completedAt?: string;
   /** 子任务列表；旧数据无此字段，读取时按空数组处理 */
   subTasks?: SubTask[];
+  /** 本地或任一设备最后一次修改时间（ISO 8601）；云端同步按它做「最后写入胜」合并 */
+  updatedAt: string;
+  /**
+   * 软删除墓碑：true 表示已删除。删除不物理抹除，而是打上墓碑并同步到云端，
+   * 其他设备据此删除本条；所有 UI 查询必须过滤掉 deleted 的任务。
+   */
+  deleted?: boolean;
 }
 
 /** 新建任务时的入参：id / 状态 / 创建时间由数据层生成 */

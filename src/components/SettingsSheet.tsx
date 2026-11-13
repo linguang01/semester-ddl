@@ -1,8 +1,11 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useRef, useState, type ChangeEvent } from 'react';
 import dayjs from 'dayjs';
+import { useDialog } from '../hooks/useDialog';
 import { checkForUpdate, type UpdateCheckResult } from '../pwa';
+import type { UseAuthResult } from '../hooks/useAuth';
 import type { InstallPromptApi } from '../hooks/useInstallPrompt';
 import { THEME_OPTIONS, type UseThemeResult } from '../hooks/useTheme';
+import type { SyncStatus } from '../lib/sync';
 import {
   BackupError,
   describeImportReport,
@@ -15,6 +18,7 @@ import {
   type ParsedBackup,
 } from '../utils/backup';
 import { exportTasksToCalendar } from '../utils/calendar';
+import { describeError } from '../utils/error';
 import {
   getNotificationState,
   requestNotificationPermission,
@@ -36,6 +40,11 @@ import { XIcon } from './icons';
 interface SettingsSheetProps {
   install: InstallPromptApi;
   theme: UseThemeResult;
+  auth: UseAuthResult;
+  sync: SyncStatus;
+  onOpenAuth: () => void;
+  onManualSync: () => void;
+  onSignOut: () => void;
   notify: Notify;
   onClose: () => void;
 }
@@ -46,7 +55,7 @@ const ACTION_BUTTON_CLASS =
 const THEME_OPTION_CLASS = 'h-11 rounded-xl text-xs font-medium transition';
 
 const UPDATE_RESULT_TOAST: Record<UpdateCheckResult, { message: string; tone: ToastTone }> = {
-  updated: { message: '发现新版本，正在自动更新并刷新…', tone: 'info' },
+  updated: { message: '发现新版本，将在关闭面板并切到后台后自动刷新', tone: 'info' },
   latest: { message: '已是最新版本', tone: 'success' },
   offline: { message: '当前处于离线状态，联网后会自动检查更新', tone: 'info' },
   unsupported: { message: '当前环境不支持自动更新（需 HTTPS 或 localhost 部署）', tone: 'error' },
@@ -58,7 +67,17 @@ const SITE_ORIGIN = window.location.origin;
 const TEMP_HOSTNAME_PATTERN = /(^|\.)edgeone\.dev$|(^|\.)vercel\.app$/i;
 const IS_TEMP_ORIGIN = TEMP_HOSTNAME_PATTERN.test(new URL(SITE_ORIGIN).hostname);
 
-export function SettingsSheet({ install, theme, notify, onClose }: SettingsSheetProps) {
+export function SettingsSheet({
+  install,
+  theme,
+  auth,
+  sync,
+  onOpenAuth,
+  onManualSync,
+  onSignOut,
+  notify,
+  onClose,
+}: SettingsSheetProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -75,22 +94,7 @@ export function SettingsSheet({ install, theme, notify, onClose }: SettingsSheet
   const [gistBusy, setGistBusy] = useState<'upload' | 'download' | null>(null);
   const [gistInfo, setGistInfo] = useState<GistUploadResult | null>(null);
   const [pendingGistBackup, setPendingGistBackup] = useState<ParsedBackup | null>(null);
-
-  useEffect(() => {
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = previous;
-    };
-  }, []);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
+  const dialogRef = useDialog(onClose);
 
   const handleExport = async () => {
     if (exporting || importing) return;
@@ -100,7 +104,7 @@ export function SettingsSheet({ install, theme, notify, onClose }: SettingsSheet
       const count = await exportBackup();
       notify(`已导出 ${count} 条任务`, 'success');
     } catch (error) {
-      notify(error instanceof Error ? error.message : '导出失败，请稍后重试', 'error');
+      notify(describeError(error, '导出失败，请稍后重试'), 'error');
     } finally {
       setExporting(false);
     }
@@ -164,7 +168,7 @@ export function SettingsSheet({ install, theme, notify, onClose }: SettingsSheet
       const count = await exportTasksToCalendar();
       notify(`已生成 ${count} 条日历提醒，请在弹出面板中确认添加`, 'success');
     } catch (error) {
-      notify(error instanceof Error ? error.message : '导出失败，请稍后重试', 'error');
+      notify(describeError(error, '导出失败，请稍后重试'), 'error');
     } finally {
       setCalendarExporting(false);
     }
@@ -208,7 +212,7 @@ export function SettingsSheet({ install, theme, notify, onClose }: SettingsSheet
       setGistInfo(result);
       notify(result.created ? '已上传到私有 Gist' : '已更新私有 Gist 备份', 'success');
     } catch (error) {
-      notify(error instanceof Error ? error.message : '上传失败', 'error');
+      notify(describeError(error, '上传失败'), 'error');
     } finally {
       setGistBusy(null);
     }
@@ -226,7 +230,7 @@ export function SettingsSheet({ install, theme, notify, onClose }: SettingsSheet
       const parsed = await downloadFromGist(gistId, gistToken);
       setPendingGistBackup(parsed);
     } catch (error) {
-      notify(error instanceof Error ? error.message : '下载失败', 'error');
+      notify(describeError(error, '下载失败'), 'error');
     } finally {
       setGistBusy(null);
     }
@@ -245,7 +249,7 @@ export function SettingsSheet({ install, theme, notify, onClose }: SettingsSheet
       const hasSkipped = result.skippedTasks + result.skippedSelections > 0;
       notify(describeImportReport(result), hasSkipped ? 'info' : 'success');
     } catch (error) {
-      notify(error instanceof Error ? error.message : '覆盖失败，现有数据未受影响', 'error');
+      notify(describeError(error, '覆盖失败，现有数据未受影响'), 'error');
     } finally {
       setGistBusy(null);
     }
@@ -260,10 +264,12 @@ export function SettingsSheet({ install, theme, notify, onClose }: SettingsSheet
       />
 
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="settings-title"
-        className="sheet-enter relative max-h-[92dvh] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-2xl bg-white px-4 pt-3 shadow-2xl dark:bg-slate-900"
+        tabIndex={-1}
+        className="sheet-enter relative max-h-[92dvh] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-2xl bg-white px-4 pt-3 shadow-2xl outline-none dark:bg-slate-900"
         style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 20px))' }}
       >
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-slate-200 dark:bg-slate-700" />
@@ -283,6 +289,67 @@ export function SettingsSheet({ install, theme, notify, onClose }: SettingsSheet
         </div>
 
         <section className="mt-4">
+          <h3 className="text-xs font-medium text-slate-500 dark:text-slate-400">账号与同步</h3>
+
+          {auth.loading ? (
+            <p className="mt-1.5 text-[11px] text-slate-400 dark:text-slate-500">
+              正在检查登录状态…
+            </p>
+          ) : auth.error ? (
+            <p className="mt-1.5 rounded-lg bg-rose-50 px-3 py-2 text-[11px] leading-relaxed text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">
+              登录状态恢复失败：{auth.error.message}。本机离线功能仍可正常使用。
+            </p>
+          ) : auth.userId ? (
+            <>
+              <p className="mt-1.5 truncate text-sm font-medium text-slate-700 dark:text-slate-200">
+                {auth.email}
+              </p>
+              <p
+                className={`mt-1 text-[11px] leading-relaxed ${
+                  sync.lastError
+                    ? 'text-rose-600 dark:text-rose-400'
+                    : 'text-slate-400 dark:text-slate-500'
+                }`}
+              >
+                {sync.syncing
+                  ? '正在同步…'
+                  : sync.lastError
+                    ? `同步异常：${sync.lastError}`
+                    : sync.lastSyncAt
+                      ? `已同步 · 上次 ${dayjs(sync.lastSyncAt).format('HH:mm')}`
+                      : '尚未同步，稍后自动尝试'}
+              </p>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={onManualSync}
+                  disabled={sync.syncing}
+                  className={ACTION_BUTTON_CLASS}
+                >
+                  {sync.syncing ? '同步中…' : '立即同步'}
+                </button>
+                <button type="button" onClick={onSignOut} className={ACTION_BUTTON_CLASS}>
+                  退出登录
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="mt-1 text-[11px] leading-relaxed text-slate-400 dark:text-slate-500">
+                登录后，本机任务会自动同步到云端，换设备登录同一账号即可共用一份数据；不登录也能继续离线使用。
+              </p>
+              <button
+                type="button"
+                onClick={onOpenAuth}
+                className={`${ACTION_BUTTON_CLASS} mt-2 w-full`}
+              >
+                登录 / 注册
+              </button>
+            </>
+          )}
+        </section>
+
+        <section className="mt-5">
           <h3 className="text-xs font-medium text-slate-500 dark:text-slate-400">外观</h3>
           <div className="mt-1.5 grid grid-cols-3 gap-2">
             {THEME_OPTIONS.map((option) => {
@@ -339,7 +406,7 @@ export function SettingsSheet({ install, theme, notify, onClose }: SettingsSheet
         <section className="mt-5">
           <h3 className="text-xs font-medium text-slate-500 dark:text-slate-400">数据备份</h3>
           <p className="mt-1 text-[11px] leading-relaxed text-slate-400 dark:text-slate-500">
-            导出全部任务和今日选择。导入采用合并方式，不会清空现有数据；写入前会自动下载一份当前数据备份。
+            导出当前可见任务和今日选择。导入采用合并方式，不会删除备份中不存在的任务；同 ID 任务以备份版本为准，写入前会自动下载当前数据备份。
           </p>
 
           <div className="mt-2 grid grid-cols-2 gap-2">
@@ -403,7 +470,7 @@ export function SettingsSheet({ install, theme, notify, onClose }: SettingsSheet
         <section className="mt-5">
           <h3 className="text-xs font-medium text-slate-500 dark:text-slate-400">云备份（GitHub Gist）</h3>
           <p className="mt-1 text-[11px] leading-relaxed text-slate-400 dark:text-slate-500">
-            用 GitHub Personal Access Token 把数据备份到私有 Gist；换设备时按 Gist ID 拉回并覆盖本地。
+            用 GitHub Personal Access Token 把可见任务备份到私有 Gist；换设备时按 Gist ID 拉回并覆盖本地。备份中不存在的本地任务会被标记删除，并同步到已登录账号。
           </p>
 
           <label className="mt-2 block">
@@ -473,7 +540,7 @@ export function SettingsSheet({ install, theme, notify, onClose }: SettingsSheet
             {dayjs(__BUILD_TIME__).format('YYYY年M月D日 HH:mm')}。
           </p>
           <p className="mt-1.5 text-[11px] leading-relaxed text-slate-400 dark:text-slate-500">
-            应用会在打开、切回前台、网络恢复时自动检查更新，页面开着时每小时也会检查一次；发现新版本会自动刷新。
+            应用会在打开、切回前台、网络恢复时自动检查更新，页面开着时每小时也会检查一次；发现新版本后会在没有未保存内容时自动刷新。
           </p>
           <p className="mt-1.5 break-all text-[11px] leading-relaxed text-slate-400 dark:text-slate-500">
             当前访问地址：{SITE_ORIGIN}
@@ -509,7 +576,7 @@ export function SettingsSheet({ install, theme, notify, onClose }: SettingsSheet
       {pendingBackup && (
         <ConfirmDialog
           title="确认导入"
-          message={`将合并导入 ${pendingBackup.tasks.length} 条任务和 ${pendingBackup.dailySelections.length} 条今日选择，现有数据不会被删除。继续？`}
+          message={`将合并导入 ${pendingBackup.tasks.length} 条任务和 ${pendingBackup.dailySelections.length} 条今日选择。同 ID 任务以备份为准，备份中不存在的本地任务不会删除。继续？`}
           confirmText="继续导入"
           cancelText="取消"
           onConfirm={() => void handleConfirmImport()}
@@ -523,7 +590,7 @@ export function SettingsSheet({ install, theme, notify, onClose }: SettingsSheet
       {pendingGistBackup && (
         <ConfirmDialog
           title="覆盖本地数据"
-          message={`将用云端备份覆盖本地全部数据（${pendingGistBackup.tasks.length} 条任务、${pendingGistBackup.dailySelections.length} 条今日选择），覆盖前会先下载一份当前数据备份。继续？`}
+          message={`将用云端备份覆盖本地可见任务（${pendingGistBackup.tasks.length} 条任务、${pendingGistBackup.dailySelections.length} 条今日选择）。备份中不存在的本地任务会被删除并同步到云端，操作前会自动下载当前数据备份。继续？`}
           confirmText="覆盖"
           cancelText="取消"
           tone="danger"

@@ -1,3 +1,4 @@
+import { memo, useMemo } from 'react';
 import dayjs from 'dayjs';
 import { MAX_DAILY_TASKS } from '../hooks/useDailySelection';
 import { useNow } from '../hooks/useNow';
@@ -9,11 +10,11 @@ import {
   TYPE_STYLE,
   formatDeadline,
   isTaskDone,
+  subTaskProgress,
 } from '../utils/taskDisplay';
 import { PlayIcon, StarIcon, WandIcon, XIcon } from './icons';
 import { DdlProgressBar } from './DdlProgressBar';
 import { SubTaskRing } from './SubTaskRing';
-import { subTaskProgress } from '../utils/taskDisplay';
 
 interface TodayViewProps {
   date: string;
@@ -39,7 +40,7 @@ function isSameDay(deadline: string, dateKey: string): boolean {
   return dayjs(deadline).isSame(dayjs(dateKey), 'day');
 }
 
-export function TodayView({
+export const TodayView = memo(function TodayView({
   date,
   tasks,
   taskIds,
@@ -52,26 +53,34 @@ export function TodayView({
   // 每 60s 刷新「当前时间」，驱动进度条与剩余文案随时间更新
   const now = useNow();
 
-  const selectedTasks: Task[] = taskIds
-    .map((id) => tasks.find((task) => task.id === id))
-    .filter((task): task is Task => task !== undefined);
-
-  const candidates = tasks.filter(
-    (task) => !isTaskDone(task) && !taskIds.includes(task.id),
+  const taskById = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
+  const validTaskIds = useMemo(
+    () => Array.from(new Set(taskIds.filter((id) => taskById.has(id)))),
+    [taskById, taskIds],
   );
+  const selectedTasks = useMemo(
+    () => validTaskIds.flatMap((id) => taskById.get(id) ?? []),
+    [taskById, validTaskIds],
+  );
+
+  const { candidates: sortedCandidates, todayDdlCount } = useMemo(() => {
+    const selected = new Set(validTaskIds);
+    const nextCandidates: Task[] = [];
+    let ddlCount = 0;
+
+    for (const task of tasks) {
+      if (isTaskDone(task)) continue;
+      if (isSameDay(task.deadline, date)) ddlCount += 1;
+      if (!selected.has(task.id)) nextCandidates.push(task);
+    }
+
+    nextCandidates.sort((a, b) => dayjs(a.deadline).valueOf() - dayjs(b.deadline).valueOf());
+    return { candidates: nextCandidates, todayDdlCount: ddlCount };
+  }, [date, tasks, validTaskIds]);
 
   // 特殊日：今天内必须完成的待办达到阈值（>= 3 件）时，给候选里的“今日 DDL”加星标
-  const todayDdlCount = tasks.filter(
-    (task) => !isTaskDone(task) && isSameDay(task.deadline, date),
-  ).length;
   const isSpecialDay = todayDdlCount >= 3;
-
-  // 候选按剩余时间升序：deadline 越早（剩余越少，含今天已过时刻的负剩余）越靠前
-  const sortedCandidates = [...candidates].sort(
-    (a, b) => dayjs(a.deadline).valueOf() - dayjs(b.deadline).valueOf(),
-  );
-
-  const full = taskIds.length >= MAX_DAILY_TASKS;
+  const full = validTaskIds.length >= MAX_DAILY_TASKS;
   // 今日三件事全部勾完：给一个收尾反馈，而不是继续显示「名额已满」的催促文案
   const allDone =
     selectedTasks.length > 0 &&
@@ -108,7 +117,7 @@ export function TodayView({
                 : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
             }`}
           >
-            {taskIds.length}/{MAX_DAILY_TASKS}
+            {validTaskIds.length}/{MAX_DAILY_TASKS}
           </span>
         </div>
 
@@ -201,7 +210,7 @@ export function TodayView({
           })}
         </ol>
 
-        {taskIds.length === 0 && (
+        {validTaskIds.length === 0 && (
           <div className="mt-3 rounded-xl bg-indigo-50/70 px-3 py-3 text-center text-xs font-medium text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300">
             从待办里挑三件最重要的事
           </div>
@@ -229,7 +238,7 @@ export function TodayView({
         <div className="mb-2 flex items-end justify-between px-1">
           <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">待办候选</h3>
           <span className="text-[11px] text-slate-400 dark:text-slate-500">
-            {candidates.length} 件
+            {sortedCandidates.length} 件
           </span>
         </div>
 
@@ -239,13 +248,13 @@ export function TodayView({
           </p>
         )}
 
-        {full && !allDone && candidates.length > 0 && (
+        {full && !allDone && sortedCandidates.length > 0 && (
           <p className="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
             名额已满：做完一件再选下一件。
           </p>
         )}
 
-        {candidates.length === 0 ? (
+        {sortedCandidates.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-6 text-center text-xs text-slate-400 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-500">
             {tasks.length === 0
               ? '还没有事项，点下方 + 添加第一条 DDL'
@@ -320,4 +329,4 @@ export function TodayView({
       </section>
     </div>
   );
-}
+});

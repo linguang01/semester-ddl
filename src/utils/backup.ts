@@ -1,13 +1,17 @@
 import dayjs from 'dayjs';
 import { db } from '../db/database';
 import { isDateKey } from './date';
-import type { DailySelection, SubTask, Task, TaskPriority, TaskStatus, TaskType } from '../types';
+import { isTaskId, taskIdFromLegacy } from './taskId';
+import { MAX_SUBTASKS, normalizeSubTasks } from './subTasks';
+import { queueTaskPush } from '../lib/sync';
+import type { DailySelection, Task, TaskPriority, TaskStatus, TaskType } from '../types';
 
 export const BACKUP_APP = 'ddl-3things';
 export const BACKUP_VERSION = 1;
 export const MAX_BACKUP_BYTES = 10 * 1024 * 1024;
 /** 单个任务的子任务上限：防御异常文件写入超大数组把 IndexedDB 撑爆 */
-export const MAX_BACKUP_SUBTASKS = 100;
+export const MAX_BACKUP_SUBTASKS = MAX_SUBTASKS;
+const MAX_DAILY_SELECTIONS = 3;
 
 const TASK_TYPES: TaskType[] = ['homework', 'exam', 'club', 'other'];
 const TASK_PRIORITIES: TaskPriority[] = ['high', 'medium', 'low'];
@@ -90,15 +94,26 @@ async function readAllData(): Promise<{
   dailySelections: DailySelection[];
 }> {
   return db.transaction('r', db.tasks, db.dailySelections, async () => {
-    const [tasks, dailySelections] = await Promise.all([
+    const [allTasks, dailySelections] = await Promise.all([
       db.tasks.toArray(),
       db.dailySelections.toArray(),
     ]);
-    return { tasks, dailySelections };
+    // 备份只包含用户可见数据；墓碑属于同步元数据，不应被当成正常任务导出。
+    const tasks = allTasks.filter((task) => !task.deleted);
+    const activeIds = new Set(tasks.map((task) => task.id));
+    return {
+      tasks,
+      dailySelections: dailySelections
+        .map((selection) => ({
+          date: selection.date,
+          taskIds: selection.taskIds.filter((id) => activeIds.has(id)),
+        }))
+        .filter((selection) => selection.taskIds.length > 0),
+    };
   });
 }
 
-/** 导出全量数据，返回任务条数用于提示 */
+/** 导出当前可见任务，返回任务条数用于提示 */
 export async function exportBackup(): Promise<number> {
   const { tasks, dailySelections } = await readAllData();
   downloadJson(`ddl-backup-${timeStamp()}.json`, createPayload(tasks, dailySelections));
@@ -117,24 +132,6 @@ export async function downloadPreImportBackup(): Promise<void> {
   downloadJson(`导入前自动备份-${timeStamp()}.json`, createPayload(tasks, dailySelections));
 }
 
-/**
- * 归一化子任务数组。
- * 关键：备份必须完整保留子任务，否则「导出 → 导入」一轮下来进度环会全部消失。
- * 脏数据（非对象、空标题）静默跳过，并截断到上限防止撑爆本地库。
- */
-function normalizeSubTasks(raw: unknown): SubTask[] {
-  if (!Array.isArray(raw)) return [];
-
-  const list: SubTask[] = [];
-  for (const item of raw.slice(0, MAX_BACKUP_SUBTASKS)) {
-    if (!isRecord(item) || typeof item.title !== 'string') continue;
-    const title = item.title.trim();
-    if (!title) continue;
-    list.push({ title, isCompleted: item.isCompleted === true });
-  }
-  return list;
-}
-
 /** 归一化可选的小时数：非数字/负数一律视为未填写 */
 function normalizeHours(raw: unknown): number | undefined {
   return typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 ? raw : undefined;
@@ -145,7 +142,7 @@ function normalizeTask(raw: unknown): Task | null {
 
   const { id, title, deadline, status } = raw;
 
-  // 必填字段缺失或类型不对，整条跳过
+  // 必填字段缺失或类型不对，整条跳过；非法 ID 会在 parseBackupText 中重映射。
   if (typeof id !== 'string' || !id.trim()) return null;
   if (typeof title !== 'string' || !title.trim()) return null;
   if (typeof deadline !== 'string' || !isValidDate(deadline)) return null;
@@ -165,12 +162,17 @@ function normalizeTask(raw: unknown): Task | null {
   const actualHours = normalizeHours(raw.actualHours);
   const createdAt =
     typeof raw.createdAt === 'string' && isValidDate(raw.createdAt)
-      ? raw.createdAt
+      ? dayjs(raw.createdAt).toISOString()
       : new Date().toISOString();
   const completedAt =
     done && typeof raw.completedAt === 'string' && isValidDate(raw.completedAt)
-      ? raw.completedAt
+      ? dayjs(raw.completedAt).toISOString()
       : undefined;
+  // 同步元数据：统一为 UTC ISO，避免同值不同时区写法影响比较。
+  const updatedAt =
+    typeof raw.updatedAt === 'string' && isValidDate(raw.updatedAt)
+      ? dayjs(raw.updatedAt).toISOString()
+      : createdAt;
 
   return {
     id: id.trim(),
@@ -185,6 +187,8 @@ function normalizeTask(raw: unknown): Task | null {
     createdAt,
     ...(completedAt ? { completedAt } : {}),
     subTasks: normalizeSubTasks(raw.subTasks),
+    updatedAt,
+    ...(raw.deleted === true ? { deleted: true } : {}),
   };
 }
 
@@ -199,7 +203,10 @@ function normalizeDailySelection(raw: unknown): DailySelection | null {
 
   return {
     date,
-    taskIds: Array.from(new Set(taskIds.map((id) => (id as string).trim()))).slice(0, 3),
+    taskIds: Array.from(new Set(taskIds.map((id) => (id as string).trim()))).slice(
+      0,
+      MAX_DAILY_SELECTIONS,
+    ),
   };
 }
 
@@ -231,6 +238,7 @@ export function parseBackupText(text: string): ParsedBackup {
   }
 
   const taskMap = new Map<string, Task>();
+  const idMap = new Map<string, string>();
   let skippedTasks = 0;
 
   for (const raw of data.tasks) {
@@ -239,8 +247,22 @@ export function parseBackupText(text: string): ParsedBackup {
       skippedTasks += 1;
       continue;
     }
+
+    const originalId = task.id;
+    if (!isTaskId(originalId)) {
+      // 稳定重映射，重复导入同一份旧备份不会产生副本。
+      task.id = taskIdFromLegacy(originalId);
+    }
+    idMap.set(originalId, task.id);
     taskMap.set(task.id, task);
   }
+
+  const tasks = Array.from(taskMap.values()).filter((task) => {
+    if (!task.deleted) return true;
+    skippedTasks += 1;
+    return false;
+  });
+  const activeIds = new Set(tasks.map((task) => task.id));
 
   const selectionMap = new Map<string, DailySelection>();
   let skippedSelections = 0;
@@ -251,11 +273,21 @@ export function parseBackupText(text: string): ParsedBackup {
       skippedSelections += 1;
       continue;
     }
-    selectionMap.set(selection.date, selection);
+
+    // File may use legacy IDs; rewrite references and drop dangling/deleted tasks.
+    const taskIds = Array.from(
+      new Set(selection.taskIds.map((id) => idMap.get(id) ?? id).filter((id) => activeIds.has(id))),
+    ).slice(0, MAX_DAILY_SELECTIONS);
+
+    if (taskIds.length === 0) {
+      skippedSelections += 1;
+      continue;
+    }
+    selectionMap.set(selection.date, { date: selection.date, taskIds });
   }
 
   return {
-    tasks: Array.from(taskMap.values()),
+    tasks,
     dailySelections: Array.from(selectionMap.values()),
     skippedTasks,
     skippedSelections,
@@ -278,39 +310,70 @@ export async function readBackupFile(file: File): Promise<ParsedBackup> {
   return parseBackupText(text);
 }
 
-/** 合并导入：同一事务内 bulkPut，任一步失败都会整体回滚 */
+/**
+ * 合并导入：同一事务内写入，任一步失败整体回滚。
+ * 导入项视为“刚刚发生的本地修改”，避免下一次云同步又用更旧云端版本覆盖备份。
+ */
 export async function mergeBackup(backup: ParsedBackup): Promise<ImportReport> {
+  const now = new Date().toISOString();
+  const imported = backup.tasks.map((task) => ({
+    ...task,
+    deleted: false,
+    updatedAt: now,
+  }));
+
   await db.transaction('rw', db.tasks, db.dailySelections, async () => {
-    if (backup.tasks.length > 0) {
-      await db.tasks.bulkPut(backup.tasks);
-    }
+    if (imported.length > 0) await db.tasks.bulkPut(imported);
     if (backup.dailySelections.length > 0) {
       await db.dailySelections.bulkPut(backup.dailySelections);
     }
   });
 
+  for (const task of imported) queueTaskPush(task);
+
   return {
-    importedTasks: backup.tasks.length,
+    importedTasks: imported.length,
     importedSelections: backup.dailySelections.length,
     skippedTasks: backup.skippedTasks,
     skippedSelections: backup.skippedSelections,
   };
 }
 
-/** 覆盖导入：清空现有数据后写入备份（用于云备份「覆盖本地」），同一事务内整体回滚 */
+/**
+ * 覆盖导入：备份中不存在的现有任务写入删除墓碑，而不是物理清库。
+ * 这样云端旧数据不会在下次同步时复活，删除也会可靠传播到其他设备。
+ */
 export async function overwriteBackup(backup: ParsedBackup): Promise<ImportReport> {
+  const now = new Date().toISOString();
+  const imported = backup.tasks.map((task) => ({
+    ...task,
+    deleted: false,
+    updatedAt: now,
+  }));
+  const importedIds = new Set(imported.map((task) => task.id));
+  const tombstones: Task[] = [];
+
   await db.transaction('rw', db.tasks, db.dailySelections, async () => {
-    await Promise.all([db.tasks.clear(), db.dailySelections.clear()]);
-    if (backup.tasks.length > 0) {
-      await db.tasks.bulkPut(backup.tasks);
+    const existing = await db.tasks.toArray();
+    for (const task of existing) {
+      if (!task.deleted && !importedIds.has(task.id)) {
+        tombstones.push({ ...task, deleted: true, updatedAt: now });
+      }
     }
+
+    if (imported.length > 0) await db.tasks.bulkPut(imported);
+    if (tombstones.length > 0) await db.tasks.bulkPut(tombstones);
+    await db.dailySelections.clear();
     if (backup.dailySelections.length > 0) {
       await db.dailySelections.bulkPut(backup.dailySelections);
     }
   });
 
+  for (const task of imported) queueTaskPush(task);
+  for (const task of tombstones) queueTaskPush(task);
+
   return {
-    importedTasks: backup.tasks.length,
+    importedTasks: imported.length,
     importedSelections: backup.dailySelections.length,
     skippedTasks: backup.skippedTasks,
     skippedSelections: backup.skippedSelections,

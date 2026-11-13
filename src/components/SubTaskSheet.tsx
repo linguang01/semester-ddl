@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useDialog } from '../hooks/useDialog';
 import type { SubTask, Task } from '../types';
+import { describeError } from '../utils/error';
 import type { Notify } from './Toast';
 import { CheckIcon, XIcon } from './icons';
 
@@ -15,58 +17,76 @@ interface SubTaskSheetProps {
 }
 
 export function SubTaskSheet({ task, onClose, onUpdateSubTasks, onEdit, notify }: SubTaskSheetProps) {
-  // 本地乐观状态：勾选立即反映到 UI，再异步落库
+  // 本地乐观状态：勾选立即反映到 UI，同一时间只允许一笔写入，避免乱序覆盖。
   const [items, setItems] = useState<SubTask[]>(() => task.subTasks ?? []);
   const [newTitle, setNewTitle] = useState('');
+  const [saving, setSaving] = useState(false);
+  const itemsRef = useRef(items);
+  const savingRef = useRef(false);
+  const pendingExternalRef = useRef<SubTask[] | null>(null);
+  const dialogRef = useDialog(onClose);
 
   const completed = items.filter((item) => item.isCompleted).length;
   const total = items.length;
 
-  // 打开时锁定背景滚动
+  // 同步其他入口/Realtime 带来的更新；写入中先暂存，结束后再应用。
   useEffect(() => {
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = previous;
-    };
-  }, []);
+    const external = task.subTasks ?? [];
+    if (savingRef.current) pendingExternalRef.current = external;
+    else {
+      itemsRef.current = external;
+      setItems(external);
+    }
+  }, [task.subTasks]);
 
-  // Esc 关闭
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
-
-  /** 统一落库：新数组先写本地，再异步持久化，失败时回滚 */
+  /** 统一落库：新数组先写本地，再异步持久化，失败时回滚到写入前状态 */
   const persist = async (next: SubTask[]) => {
+    if (savingRef.current) return;
+
+    const previous = itemsRef.current;
+    itemsRef.current = next;
+    savingRef.current = true;
     setItems(next);
+    setSaving(true);
+
     try {
       await onUpdateSubTasks(task.id, next);
     } catch (error) {
-      setItems(task.subTasks ?? []); // 回滚到最近一次成功状态
-      notify(error instanceof Error ? error.message : String(error), 'error');
+      itemsRef.current = previous;
+      setItems(previous);
+      notify(describeError(error, '子任务保存失败，已恢复原状态'), 'error');
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+
+      const pending = pendingExternalRef.current;
+      pendingExternalRef.current = null;
+      if (pending) {
+        itemsRef.current = pending;
+        setItems(pending);
+      }
     }
   };
 
   const toggleItem = (index: number) => {
-    const next = items.map((item, i) =>
+    if (savingRef.current) return;
+    const next = itemsRef.current.map((item, i) =>
       i === index ? { ...item, isCompleted: !item.isCompleted } : item,
     );
     void persist(next);
   };
 
   const addItem = () => {
+    if (savingRef.current) return;
     const title = newTitle.trim();
     if (!title) return;
     setNewTitle('');
-    void persist([...items, { title, isCompleted: false }]);
+    void persist([...itemsRef.current, { title, isCompleted: false }]);
   };
 
   const removeItem = (index: number) => {
-    void persist(items.filter((_, i) => i !== index));
+    if (savingRef.current) return;
+    void persist(itemsRef.current.filter((_, i) => i !== index));
   };
 
   return (
@@ -78,10 +98,12 @@ export function SubTaskSheet({ task, onClose, onUpdateSubTasks, onEdit, notify }
       />
 
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="subtask-sheet-title"
-        className="sheet-enter relative max-h-[80dvh] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-2xl bg-white px-4 pt-3 shadow-2xl dark:bg-slate-900"
+        tabIndex={-1}
+        className="sheet-enter relative max-h-[80dvh] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-2xl bg-white px-4 pt-3 shadow-2xl outline-none dark:bg-slate-900"
         style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 20px))' }}
       >
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-slate-200 dark:bg-slate-700" />
@@ -106,7 +128,7 @@ export function SubTaskSheet({ task, onClose, onUpdateSubTasks, onEdit, notify }
         {/* 进度概览 */}
         <div className="mt-3 flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3 dark:bg-slate-800/60">
           <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-            {total === 0 ? '还没有子任务' : completed === total ? '全部完成 🎉' : '已完成'}
+            {saving ? '保存中…' : total === 0 ? '还没有子任务' : completed === total ? '全部完成 🎉' : '已完成'}
           </span>
           <span
             className={`text-sm font-semibold tabular-nums ${
@@ -133,7 +155,8 @@ export function SubTaskSheet({ task, onClose, onUpdateSubTasks, onEdit, notify }
                 aria-checked={item.isCompleted}
                 aria-label={`${item.isCompleted ? '取消完成' : '标记完成'}：${item.title}`}
                 onClick={() => toggleItem(index)}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition hover:bg-slate-50 active:scale-95 dark:hover:bg-slate-800/60"
+                disabled={saving}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition hover:bg-slate-50 active:scale-95 disabled:opacity-50 dark:hover:bg-slate-800/60"
               >
                 <span
                   className={`flex h-[22px] w-[22px] items-center justify-center rounded-md border-2 transition ${
@@ -159,8 +182,9 @@ export function SubTaskSheet({ task, onClose, onUpdateSubTasks, onEdit, notify }
               <button
                 type="button"
                 onClick={() => removeItem(index)}
+                disabled={saving}
                 aria-label={`删除子任务：${item.title}`}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-300 transition hover:bg-slate-100 hover:text-rose-500 dark:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-rose-400"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-300 transition hover:bg-slate-100 hover:text-rose-500 disabled:opacity-50 dark:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-rose-400"
               >
                 <XIcon className="h-4 w-4" />
               </button>
@@ -185,6 +209,7 @@ export function SubTaskSheet({ task, onClose, onUpdateSubTasks, onEdit, notify }
                 addItem();
               }
             }}
+            disabled={saving}
             maxLength={60}
             placeholder="添加子任务，回车确认"
             aria-label="新子任务标题"
@@ -193,7 +218,7 @@ export function SubTaskSheet({ task, onClose, onUpdateSubTasks, onEdit, notify }
           <button
             type="button"
             onClick={addItem}
-            disabled={!newTitle.trim()}
+            disabled={saving || !newTitle.trim()}
             className="h-12 shrink-0 rounded-xl bg-slate-900 px-4 text-sm font-medium text-white transition active:scale-[0.98] disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900"
           >
             添加

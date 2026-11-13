@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { CalendarIcon, ChartIcon, ListIcon, PlusIcon, SunIcon } from './icons';
 
 export type TabKey = 'all' | 'today' | 'stats' | 'calendar';
@@ -8,11 +9,11 @@ interface BottomNavProps {
   onCreate: () => void;
 }
 
-export function BottomNav({ active, onChange, onCreate }: BottomNavProps) {
+export const BottomNav = memo(function BottomNav({ active, onChange, onCreate }: BottomNavProps) {
   return (
     <nav
       aria-label="底部导航"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 shadow-lift backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 shadow-lift"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 shadow-lift backdrop-blur dark:border-slate-800 dark:bg-slate-900/95"
     >
       <div
         className="mx-auto grid max-w-md grid-cols-5"
@@ -79,4 +80,4 @@ export function BottomNav({ active, onChange, onCreate }: BottomNavProps) {
       </button>
     </nav>
   );
-}
+});

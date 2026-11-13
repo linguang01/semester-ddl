@@ -2,9 +2,10 @@ import dayjs from 'dayjs';
 import { atDefaultDeadline } from './date';
 
 /**
- * 快速添加（Quick Add）自然语言解析（纯正则 + dayjs，无 eval / new Function）。
+ * 日期时间自然语言解析（第一层，纯正则 + dayjs，无 eval / new Function）。
  *
  * 目标：模仿滴答清单，让用户直接在标题框写一句话，同时填好「截止时间」和「任务名称」。
+ * 完整的智能录入（含耗时/优先级/课程）见 parseTaskText.ts，在本文件基础上扩展。
  *
  * 支持的高频写法：
  * - 日期：今天 / 明天 / 后天 / 大后天 / 周末 / 周X / 星期X / 礼拜X / X号 / X日
@@ -16,7 +17,7 @@ import { atDefaultDeadline } from './date';
  *       「后天下午三点开会」   → 后天 15:00，标题「开会」。
  */
 
-export interface QuickAddResult {
+export interface DateTimeParseResult {
   /** 去掉日期/时间片段后的任务名称 */
   title: string;
   /** 解析出的截止时间（标准 Date 对象） */
@@ -28,10 +29,12 @@ export interface QuickAddResult {
 }
 
 // —— 时段 → 小时换算 ——
-// 下午/晚上等：12 点以内的钟点要 +12（下午3点 = 15:00）
-const PM_PERIODS = ['中午', '下午', '晚上', '傍晚', '深夜', '夜里', '晚'];
-// 凌晨/午夜：12点 = 0点，其余钟点不变（凌晨3点 = 03:00）
-const AM_PERIODS = ['凌晨', '午夜'];
+// 中午/下午：12 点以内的钟点 +12（下午3点 = 15:00）
+const PM_PERIODS = ['中午', '下午'];
+// 晚上/傍晚：12 点表示午夜 0 点（晚上12点 = 00:00）
+const EVENING_PERIODS = ['晚上', '傍晚', '晚'];
+// 凌晨/深夜/夜里/午夜：保持 24 小时制，12 点归零（深夜3点 = 03:00）
+const EARLY_MORNING_PERIODS = ['凌晨', '深夜', '夜里', '午夜'];
 
 // 星期映射：dayjs 的 day() 中 0=周日 ~ 6=周六
 const WEEKDAY_MAP: Record<string, number> = {
@@ -116,7 +119,10 @@ function isValidHourMinute(hour: number, minute: number): boolean {
 function adjustHour(hour: number, period?: string): number {
   if (!period) return hour; // 无时段前缀：按 24 小时制原样（如「23:59」）
   if (PM_PERIODS.includes(period)) return hour < 12 ? hour + 12 : hour;
-  if (AM_PERIODS.includes(period)) return hour === 12 ? 0 : hour;
+  if (EVENING_PERIODS.includes(period)) {
+    return hour === 12 ? 0 : hour < 12 ? hour + 12 : hour;
+  }
+  if (EARLY_MORNING_PERIODS.includes(period)) return hour === 12 ? 0 : hour;
   return hour; // 上午/早上：保持原样
 }
 
@@ -177,19 +183,27 @@ function resolveDate(token: string, today: dayjs.Dayjs): dayjs.Dayjs | null {
   const weekday = token.match(/^(?:周|星期|礼拜)([一二三四五六日天])$/);
   if (weekday) return nextWeekday(today, WEEKDAY_MAP[weekday[1]]);
 
-  // 「下周X / 下星期X / 下礼拜X」：本周同一天再 +7 天（严格下个自然周）
+  // 「下周X」= 下一个自然周的周一作为起点，再加 0~6 天。
   const nextWeek = token.match(/^下(?:周|星期|礼拜)([一二三四五六日天])$/);
-  if (nextWeek) return nextWeekday(today, WEEKDAY_MAP[nextWeek[1]]).add(7, 'day');
+  if (nextWeek) {
+    const daysSinceMonday = (today.day() + 6) % 7;
+    const nextMonday = today.startOf('day').subtract(daysSinceMonday, 'day').add(7, 'day');
+    return nextMonday.add((WEEKDAY_MAP[nextWeek[1]] + 6) % 7, 'day');
+  }
 
   const dayOfMonth = token.match(/^(\d{1,2})\s*[号日]$/);
   if (dayOfMonth) {
     const dayNum = Number(dayOfMonth[1]);
-    let d = today.date(dayNum);
-    // dayjs 的 date() 会溢出（如 2 月 31 日滚到 3 月），校验一次排除非法日期
-    if (d.date() !== dayNum) return null;
-    // 「几号」已过（含今天）就顺延到下个月
-    if (d.isBefore(today)) d = d.add(1, 'month');
-    return d;
+
+    // 当前月不存在该日（如 2 月 31 日）时继续找下一个合法月份。
+    for (let offset = 0; offset <= 12; offset += 1) {
+      const monthStart = today.add(offset, 'month').startOf('month');
+      const candidate = monthStart.date(dayNum);
+      if (candidate.month() !== monthStart.month() || candidate.date() !== dayNum) continue;
+      if (candidate.isBefore(today)) continue;
+      return candidate;
+    }
+    return null;
   }
 
   return null;
@@ -214,7 +228,7 @@ function cleanTitle(rest: string): string {
  * @param input 用户输入的一句话，如「后天下午三点开会」
  * @param now 解析基准时间（默认当前时间），便于测试
  */
-export function parseQuickAdd(input: string, now: Date = new Date()): QuickAddResult {
+export function parseDateTime(input: string, now: Date = new Date()): DateTimeParseResult {
   const startOfToday = dayjs(now).startOf('day');
 
   // 归一化复合词：明晚→明天晚上，让日期和时段能分别被识别
@@ -241,8 +255,9 @@ export function parseQuickAdd(input: string, now: Date = new Date()): QuickAddRe
     if (date) {
       hasDate = true;
       deadline = atDefaultDeadline(date);
+      // 只有成功解析才从标题移除，避免「32号报告」丢掉关键信息。
+      rest = rest.replace(dateMatch[0], ' ');
     }
-    rest = rest.replace(dateMatch[0], ' ');
   }
 
   // 2) 解析时间：在剔除日期后的剩余文本里找

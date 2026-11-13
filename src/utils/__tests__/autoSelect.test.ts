@@ -14,6 +14,7 @@ function makeTask(overrides: Partial<Task> & Pick<Task, 'id' | 'title'>): Task {
     priority: 'medium',
     status: 'todo',
     createdAt: '2026-11-01T00:00:00+08:00',
+    updatedAt: '2026-11-01T00:00:00+08:00',
     ...overrides,
   };
 }

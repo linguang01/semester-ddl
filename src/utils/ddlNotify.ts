@@ -39,7 +39,7 @@ export function findDueTasks(tasks: Task[], now = Date.now()): Task[] {
 }
 
 /** 通过 Service Worker 弹系统通知；无 SW 时回退到页面内 new Notification */
-async function showSystemNotification(title: string, body: string, tag: string): Promise<void> {
+export async function showSystemNotification(title: string, body: string, tag: string): Promise<void> {
   // 优先走 SW：应用切后台/最小化时也能弹
   try {
     const reg = await navigator.serviceWorker.getRegistration();
@@ -51,9 +51,13 @@ async function showSystemNotification(title: string, body: string, tag: string):
     // 无 SW 环境，走下方回退
   }
 
-  // 回退：仅在页面打开时生效
-  if ('Notification' in window && Notification.permission === 'granted') {
-    new Notification(title, { body, tag });
+  // 回退：仅在页面打开时生效；部分移动浏览器不支持页面内构造器
+  try {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification(title, { body, tag });
+    }
+  } catch {
+    // 不支持时静默跳过
   }
 }
 
@@ -94,16 +98,18 @@ export async function checkDdlNotifications(tasks: Task[]): Promise<void> {
  * 通过 getTasks 拿到最新任务，避免闭包拿到过期数据。返回清理函数。
  */
 export function initDdlNotifications(getTasks: () => Task[]): () => void {
-  void checkDdlNotifications(getTasks());
+  const checkWhenVisible = () => {
+    if (document.visibilityState === 'visible') void checkDdlNotifications(getTasks());
+  };
 
-  const timer = window.setInterval(() => {
-    // 后台挂起时不查，切回前台会由页面可见性触发下一轮
-    if (document.visibilityState === 'visible') {
-      void checkDdlNotifications(getTasks());
-    }
-  }, CHECK_INTERVAL_MS);
+  checkWhenVisible();
+  const timer = window.setInterval(checkWhenVisible, CHECK_INTERVAL_MS);
+  document.addEventListener('visibilitychange', checkWhenVisible);
 
-  return () => window.clearInterval(timer);
+  return () => {
+    window.clearInterval(timer);
+    document.removeEventListener('visibilitychange', checkWhenVisible);
+  };
 }
 
 /** 开启通知后立即发一条测试通知，让用户确认系统能弹 */

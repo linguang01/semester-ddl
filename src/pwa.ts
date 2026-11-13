@@ -12,12 +12,11 @@ import { registerSW } from 'virtual:pwa-register';
  * - 设置面板里可以手动「检查更新」。
  *
  * 新 SW（构建时带 skipWaiting/clientsClaim）安装完成后立即激活，随后自动刷新页面
- * 加载新版本；用户正在操作时会延迟到切后台时再刷新，最多等 2 分钟。
+ * 加载新版本；有弹窗/未保存表单时只等切到后台再刷新，不会强制打断输入。
  */
 
 const PERIODIC_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 const MIN_CHECK_GAP_MS = 60 * 1000;
-const DEFERRED_RELOAD_TIMEOUT_MS = 2 * 60 * 1000;
 const LAUNCH_GRACE_MS = 30 * 1000;
 
 export type UpdateCheckResult = 'updated' | 'latest' | 'offline' | 'unsupported' | 'error';
@@ -27,19 +26,37 @@ let lastCheckAt = 0;
 let newVersionFound = false;
 let reloadTriggered = false;
 let immediateReloadUntil = 0;
+let waitingForBackground = false;
 const pageLoadedAt = Date.now();
 
 function reloadPage() {
   if (reloadTriggered) return;
   reloadTriggered = true;
+  document.removeEventListener('visibilitychange', onHiddenReload);
   window.location.reload();
 }
 
+/** 有表单/确认框打开时绝不自动刷新，避免未保存内容被更新吞掉。 */
+function hasBlockingDialog(): boolean {
+  return document.querySelector('[role="dialog"], [role="alertdialog"]') !== null;
+}
+
 function onHiddenReload() {
-  if (document.visibilityState === 'hidden') reloadPage();
+  if (document.visibilityState === 'hidden' && !hasBlockingDialog()) reloadPage();
+}
+
+function waitForBackground(): void {
+  if (waitingForBackground) return;
+  waitingForBackground = true;
+  document.addEventListener('visibilitychange', onHiddenReload);
 }
 
 function handleNeedReload() {
+  if (hasBlockingDialog()) {
+    waitForBackground();
+    return;
+  }
+
   const now = Date.now();
   // 刚打开应用（启动阶段）或刚手动检查出更新：立即刷新，不等待
   if (document.visibilityState === 'hidden' || now - pageLoadedAt < LAUNCH_GRACE_MS || now < immediateReloadUntil) {
@@ -47,9 +64,8 @@ function handleNeedReload() {
     return;
   }
 
-  // 使用中途发现的更新：等切到后台再刷新，避免打断正在输入的内容；最多等 2 分钟
-  document.addEventListener('visibilitychange', onHiddenReload);
-  window.setTimeout(reloadPage, DEFERRED_RELOAD_TIMEOUT_MS);
+  // 使用中途发现的更新：等切到后台且没有未保存弹窗时再刷新，不强制打断。
+  waitForBackground();
 }
 
 async function runUpdateCheck(): Promise<void> {
@@ -78,7 +94,8 @@ export function initPwa() {
       registration = reg;
 
       reg.addEventListener('updatefound', () => {
-        newVersionFound = true;
+        // 首次安装也会触发 updatefound；已有 active worker 才是真正的版本更新。
+        if (reg.active) newVersionFound = true;
       });
 
       // 页面一直开着（PWA 从主屏幕打开后挂在后台/常驻）也要能发现新版本
@@ -119,6 +136,7 @@ export async function checkForUpdate(): Promise<UpdateCheckResult> {
     // 手动检查发现新版本时立即刷新，不走延迟逻辑（须在 update() 之前设置）
     immediateReloadUntil = Date.now() + LAUNCH_GRACE_MS;
     lastCheckAt = Date.now();
+    newVersionFound = false;
 
     const result = await reg.update();
     if (newVersionFound || result.installing || result.waiting) return 'updated';

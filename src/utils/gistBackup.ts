@@ -1,5 +1,6 @@
 import {
   BackupError,
+  MAX_BACKUP_BYTES,
   buildBackupPayload,
   parseBackupText,
   type BackupPayload,
@@ -13,6 +14,59 @@ const GIST_FILE_NAME = 'ddl-backup.json';
 // Token 与 Gist ID 的本地存储 key
 const TOKEN_KEY = 'ddl-gist-token';
 const GIST_ID_KEY = 'ddl-gist-id';
+const REQUEST_TIMEOUT_MS = 20_000;
+
+async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (cause) {
+    if (cause instanceof DOMException && cause.name === 'AbortError') {
+      throw new BackupError('请求超时，请检查网络后重试');
+    }
+    throw new BackupError('网络请求失败，请检查网络连接');
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
+/** 流式读取并限制字节数，避免超大 Gist 备份一次性占满内存。 */
+async function readTextWithLimit(response: Response): Promise<string> {
+  const declared = Number(response.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > MAX_BACKUP_BYTES) {
+    throw new BackupError('Gist 备份超过 10 MB，已取消读取');
+  }
+  if (!response.body) {
+    const text = await response.text();
+    if (new Blob([text]).size > MAX_BACKUP_BYTES) {
+      throw new BackupError('Gist 备份超过 10 MB，已取消读取');
+    }
+    return text;
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const chunks: string[] = [];
+  let total = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_BACKUP_BYTES) {
+        await reader.cancel();
+        throw new BackupError('Gist 备份超过 10 MB，已取消读取');
+      }
+      chunks.push(decoder.decode(value, { stream: true }));
+    }
+    chunks.push(decoder.decode());
+    return chunks.join('');
+  } finally {
+    reader.releaseLock();
+  }
+}
 
 export interface GistUploadResult {
   gistId: string;
@@ -94,7 +148,7 @@ export async function uploadToGist(
   const url = isUpdate ? `${GIST_API}/${gistId}` : GIST_API;
   const method = isUpdate ? 'PATCH' : 'POST';
 
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     method,
     headers: authHeaders(token),
     body: JSON.stringify({
@@ -117,7 +171,7 @@ export async function uploadToGist(
 /** 从 Gist 读取备份内容并解析校验（不写入数据库） */
 export async function downloadFromGist(gistId: string, token: string): Promise<ParsedBackup> {
   const id = gistId.trim();
-  const response = await fetch(`${GIST_API}/${id}`, {
+  const response = await fetchWithTimeout(`${GIST_API}/${id}`, {
     method: 'GET',
     headers: authHeaders(token),
   });
@@ -137,10 +191,15 @@ export async function downloadFromGist(gistId: string, token: string): Promise<P
   let content = file.content ?? '';
 
   // 超过 1MB 时 GitHub 会截断 content（truncated=true），需再拉 raw_url
-  if (file.truncated && file.raw_url) {
-    const raw = await fetch(file.raw_url, { headers: { Authorization: `Bearer ${token.trim()}` } });
+  if (file.truncated) {
+    if (!file.raw_url) throw new BackupError('Gist 备份内容不完整，请重新上传备份');
+    const raw = await fetchWithTimeout(file.raw_url, {
+      headers: { Authorization: `Bearer ${token.trim()}` },
+    });
     if (!raw.ok) throw new BackupError('读取备份内容失败');
-    content = await raw.text();
+    content = await readTextWithLimit(raw);
+  } else if (new Blob([content]).size > MAX_BACKUP_BYTES) {
+    throw new BackupError('Gist 备份超过 10 MB，已取消读取');
   }
 
   // 复用 backup.ts 的解析：校验 app 标识与版本、规范化任务与今日选择
@@ -155,10 +214,11 @@ export async function backupToGist(token: string): Promise<GistUploadResult> {
   if (token.trim().length < 10) {
     throw new BackupError('请先填写有效的 Personal Access Token');
   }
-  saveToken(token.trim());
 
   const payload = await buildBackupPayload();
   const result = await uploadToGist(token, payload, getStoredGistId());
+  // 上传成功后再持久化，输错 Token 不会覆盖掉之前可用的凭据。
+  saveToken(token.trim());
   saveGistId(result.gistId);
   return result;
 }

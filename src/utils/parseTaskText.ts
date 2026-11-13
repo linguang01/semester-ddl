@@ -1,10 +1,10 @@
 import type { TaskPriority, TaskType } from '../types';
-import { parseQuickAdd } from './parseQuickAdd';
+import { parseDateTime } from './parseDateTime';
 
 /**
- * 智能录入解析：一句话 → 填满整个表单。
+ * 智能录入解析（第二层）：一句话 → 填满整个表单。
  *
- * 在已有 parseQuickAdd（日期/时间/标题）的基础上，继续抽取：
+ * 在已有 parseDateTime（日期/时间/标题，见 parseDateTime.ts）的基础上，继续抽取：
  *   - 预计耗时：预计2小时 / 复习3个小时 / 1.5小时 / 半小时 / 一个半小时
  *   - 优先级：高优先级 / 优先级高 / 紧急 / 加急 / 中优先级 / 低优先级 …
  *   - 课程：标题里的「XXX作业/考试/实验…」前缀，或显式「课程：高等数学」
@@ -13,7 +13,7 @@ import { parseQuickAdd } from './parseQuickAdd';
  * 纯正则 + dayjs，无网络、无 API、零延迟，与项目「本地优先」一致。
  */
 
-export interface SmartParseResult {
+export interface TaskTextParseResult {
   /** 去掉日期/时间/耗时/优先级片段后的任务名 */
   title: string;
   /** 课程 / 归属（未识别则为空串） */
@@ -138,12 +138,12 @@ function cleanTitle(rest: string): string {
  * @param input 例如「明天下午3点交高数作业，预计2小时，高优先级」
  * @param now 解析基准时间（默认当前时间），便于测试
  */
-export function parseSmartInput(input: string, now: Date = new Date()): SmartParseResult {
-  // 1) 日期/时间/基础标题：复用已有解析
-  const quick = parseQuickAdd(input, now);
+export function parseTaskText(input: string, now: Date = new Date()): TaskTextParseResult {
+  // 1) 日期/时间/基础标题：复用第一层解析
+  const parsed = parseDateTime(input, now);
 
   // 2) 在剩余标题文本里依次抽「耗时」「优先级」，并从标题剔除
-  let title = quick.title;
+  let title = parsed.title;
   let estimatedHours = 1;
   let priority: TaskPriority = 'medium';
   let hasHours = false;
@@ -186,12 +186,12 @@ export function parseSmartInput(input: string, now: Date = new Date()): SmartPar
   return {
     title,
     course: courseValue,
-    deadline: quick.deadline,
+    deadline: parsed.deadline,
     estimatedHours,
     priority,
     type,
-    hasDate: quick.hasDate,
-    hasTime: quick.hasTime,
+    hasDate: parsed.hasDate,
+    hasTime: parsed.hasTime,
     hasHours,
     hasPriority,
     hasCourse: courseValue !== '',

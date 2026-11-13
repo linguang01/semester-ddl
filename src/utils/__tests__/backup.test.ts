@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BACKUP_APP, BACKUP_VERSION, parseBackupText } from '../backup';
+import { isTaskId } from '../taskId';
 
 /** 造一个最小可用的备份文件字符串 */
 function buildFile(tasks: unknown[], dailySelections: unknown[] = []): string {
@@ -87,5 +88,48 @@ describe('parseBackupText', () => {
   it('标题前后空格被清理', () => {
     const parsed = parseBackupText(buildFile([baseTask]));
     expect(parsed.tasks[0].title).toBe('写实验报告');
+  });
+
+  it('旧备份的非 UUID ID 会重映射，并同步改写每日选择引用', () => {
+    const parsed = parseBackupText(
+      buildFile([baseTask], [
+        { date: '2026-11-10', taskIds: ['task-1', 'missing-task'] },
+      ]),
+    );
+
+    expect(parsed.tasks).toHaveLength(1);
+    expect(isTaskId(parsed.tasks[0].id)).toBe(true);
+    expect(parsed.tasks[0].id).not.toBe('task-1');
+    expect(parsed.dailySelections).toEqual([
+      { date: '2026-11-10', taskIds: [parsed.tasks[0].id] },
+    ]);
+
+    // 同一旧备份重复导入必须得到相同 ID，避免产生重复任务。
+    const again = parseBackupText(buildFile([baseTask]));
+    expect(again.tasks[0].id).toBe(parsed.tasks[0].id);
+  });
+
+  it('墓碑不进入普通备份，也不会在新设备上复活删除任务', () => {
+    const parsed = parseBackupText(
+      buildFile([{ ...baseTask, deleted: true }, { ...baseTask, id: 'task-2' }]),
+    );
+
+    expect(parsed.tasks).toHaveLength(1);
+    expect(parsed.skippedTasks).toBe(1);
+  });
+
+  it('同步时间戳统一规范化为 UTC ISO，便于跨时区比较', () => {
+    const parsed = parseBackupText(
+      buildFile([
+        {
+          ...baseTask,
+          createdAt: '2026-11-01T08:00:00+08:00',
+          updatedAt: '2026-11-02T08:00:00+08:00',
+        },
+      ]),
+    );
+
+    expect(parsed.tasks[0].createdAt).toBe('2026-11-01T00:00:00.000Z');
+    expect(parsed.tasks[0].updatedAt).toBe('2026-11-02T00:00:00.000Z');
   });
 });

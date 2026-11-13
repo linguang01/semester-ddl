@@ -1,11 +1,13 @@
 import { useCallback } from 'react';
 import dayjs from 'dayjs';
-import { db } from '../db/database';
+import { db, removeTaskIdsFromDailySelections } from '../db/database';
 import { useDbQuery } from './useDbQuery';
+import { queueTaskPush } from '../lib/sync';
+import { normalizeSubTasks } from '../utils/subTasks';
 import type { NewTaskInput, SubTask, Task, TaskUpdate } from '../types';
 
 export interface UseTasksResult {
-  /** 全部任务，按 deadline 升序 */
+  /** 全部任务（已过滤软删除墓碑），按 deadline 升序 */
   tasks: Task[];
   loading: boolean;
   error: Error | null;
@@ -33,40 +35,47 @@ function normalizeTitle(value: string): string {
   return title;
 }
 
-/** 归一化子任务：去首尾空格、过滤空标题、强制 isCompleted 为布尔值 */
-function normalizeSubTasks(value: SubTask[] | undefined): SubTask[] {
-  return (value ?? [])
-    .map((item) => ({ title: item.title.trim(), isCompleted: Boolean(item.isCompleted) }))
-    .filter((item) => item.title.length > 0);
-}
-
 /**
  * 任务读写层。
  * tasks 通过 Dexie liveQuery 订阅，任何增删改都会自动推送给组件。
+ * 每次写入都会：更新 updatedAt（多端同步的合并依据）→ 写本地 → 入队推送云端（未登录时静默跳过）。
  */
 export function useTasks(): UseTasksResult {
   const {
     value: tasks,
     loading,
     error,
-  } = useDbQuery<Task[]>(() => db.tasks.orderBy('deadline').toArray(), [], []);
+  } = useDbQuery<Task[]>(
+    // 软删除的任务不进入 UI；orderBy 仍按 deadline，过滤在内存完成（数据量小）
+    () => db.tasks.orderBy('deadline').toArray().then((list) => list.filter((task) => !task.deleted)),
+    [],
+    [],
+  );
 
   const addTask = useCallback(async (input: NewTaskInput): Promise<Task> => {
+    const estimatedHours = input.estimatedHours ?? 0;
+    if (!Number.isFinite(estimatedHours) || estimatedHours < 0 || estimatedHours > 100) {
+      throw new Error('预计耗时需在 0~100 小时之间');
+    }
+
+    const now = new Date().toISOString();
     const task: Task = {
       id: crypto.randomUUID(),
       title: normalizeTitle(input.title),
       type: input.type,
       course: input.course.trim(),
       deadline: normalizeDeadline(input.deadline),
-      estimatedHours: input.estimatedHours ?? 0,
+      estimatedHours,
       actualHours: input.actualHours,
       priority: input.priority ?? 'medium',
       status: 'todo',
-      createdAt: new Date().toISOString(),
+      createdAt: now,
       subTasks: normalizeSubTasks(input.subTasks),
+      updatedAt: now,
     };
 
     await db.tasks.add(task);
+    queueTaskPush(task);
     return task;
   }, []);
 
@@ -85,8 +94,12 @@ export function useTasks(): UseTasksResult {
       changes.estimatedHours = patch.estimatedHours;
     }
 
-    if (patch.actualHours !== undefined) {
-      if (!Number.isFinite(patch.actualHours) || patch.actualHours < 0) {
+    // 必须用 in 判断：undefined 表示用户明确清空，而不是“未提交该字段”。
+    if ('actualHours' in patch) {
+      if (
+        patch.actualHours !== undefined &&
+        (!Number.isFinite(patch.actualHours) || patch.actualHours < 0)
+      ) {
         throw new Error('实际耗时必须是非负数字');
       }
       changes.actualHours = patch.actualHours;
@@ -108,25 +121,32 @@ export function useTasks(): UseTasksResult {
 
     if (Object.keys(changes).length === 0) return;
 
-    const updatedCount = await db.tasks.update(id, changes);
-    if (updatedCount === 0) {
-      throw new Error(`任务不存在：${id}`);
-    }
+    changes.updatedAt = new Date().toISOString();
+
+    const fresh = await db.transaction('rw', db.tasks, async () => {
+      const updatedCount = await db.tasks.update(id, changes);
+      if (updatedCount === 0) throw new Error(`任务不存在：${id}`);
+      return db.tasks.get(id);
+    });
+    if (fresh) queueTaskPush(fresh);
   }, []);
 
   const deleteTask = useCallback(async (id: string): Promise<void> => {
-    // 事务内同时删除任务 + 清理所有每日选择里的该 taskId
-    await db.transaction('rw', db.tasks, db.dailySelections, async () => {
-      await db.tasks.delete(id);
+    // 软删除：打墓碑 + 更新 updatedAt，让删除操作能同步到其他设备；
+    // 同一事务内同时清理所有每日选择里的该 taskId
+    const tombstone: Partial<Task> = { deleted: true, updatedAt: new Date().toISOString() };
 
-      const affectedSelections = await db.dailySelections.where('taskIds').equals(id).toArray();
-      for (const selection of affectedSelections) {
-        await db.dailySelections.put({
-          date: selection.date,
-          taskIds: selection.taskIds.filter((taskId) => taskId !== id),
-        });
+    await db.transaction('rw', db.tasks, db.dailySelections, async () => {
+      const updatedCount = await db.tasks.update(id, tombstone);
+      if (updatedCount === 0) {
+        throw new Error(`任务不存在：${id}`);
       }
+
+      await removeTaskIdsFromDailySelections([id]);
     });
+
+    const fresh = await db.tasks.get(id);
+    if (fresh) queueTaskPush(fresh);
   }, []);
 
   const toggleTaskDone = useCallback(async (id: string): Promise<void> => {
@@ -140,8 +160,12 @@ export function useTasks(): UseTasksResult {
       await db.tasks.update(id, {
         status: nextDone ? 'done' : 'todo',
         completedAt: nextDone ? new Date().toISOString() : undefined,
+        updatedAt: new Date().toISOString(),
       });
     });
+
+    const fresh = await db.tasks.get(id);
+    if (fresh) queueTaskPush(fresh);
   }, []);
 
   const updateSubTasks = useCallback(async (id: string, subTasks: SubTask[]): Promise<void> => {
@@ -153,7 +177,7 @@ export function useTasks(): UseTasksResult {
         throw new Error(`任务不存在：${id}`);
       }
 
-      const changes: Partial<Task> = { subTasks: normalized };
+      const changes: Partial<Task> = { subTasks: normalized, updatedAt: new Date().toISOString() };
 
       // 仅当仍存在子任务时才联动任务状态；删光子任务不改变任务本身的完成状态
       if (normalized.length > 0) {
@@ -171,6 +195,9 @@ export function useTasks(): UseTasksResult {
 
       await db.tasks.update(id, changes);
     });
+
+    const fresh = await db.tasks.get(id);
+    if (fresh) queueTaskPush(fresh);
   }, []);
 
   return { tasks, loading, error, addTask, updateTask, deleteTask, toggleTaskDone, updateSubTasks };

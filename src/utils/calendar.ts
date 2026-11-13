@@ -120,6 +120,7 @@ export function buildCalendar(tasks: Task[]): string {
   ];
 
   for (const task of tasks) {
+    if (task.deleted || !dayjs(task.deadline).isValid()) continue;
     lines.push(...buildEvent(task));
   }
 
@@ -151,7 +152,9 @@ function downloadIcs(filename: string, content: string): void {
  * 返回任务条数，供 UI 提示。
  */
 export async function exportTasksToCalendar(): Promise<number> {
-  const tasks = await db.tasks.orderBy('deadline').toArray();
+  const tasks = (await db.tasks.orderBy('deadline').toArray()).filter(
+    (task) => !task.deleted && dayjs(task.deadline).isValid(),
+  );
   if (tasks.length === 0) {
     throw new Error('没有可导出的任务');
   }

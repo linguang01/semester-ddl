@@ -7,6 +7,7 @@ import type { DailySelection } from '../types';
 
 /** 每日最多选中的任务数，硬性上限 */
 export const MAX_DAILY_TASKS = 3;
+const EMPTY_TASK_IDS: string[] = [];
 
 /** 超过每日上限时抛出的可捕获错误，UI 可用 instanceof 判断 */
 export class DailySelectionLimitError extends Error {
@@ -76,7 +77,7 @@ export function useDailySelection(activeDate: string): UseDailySelectionResult {
 
       return db.transaction('rw', db.tasks, db.dailySelections, async () => {
         const task = await db.tasks.get(taskId);
-        if (!task) {
+        if (!task || task.deleted) {
           throw new Error(`任务不存在：${taskId}`);
         }
 
@@ -86,18 +87,28 @@ export function useDailySelection(activeDate: string): UseDailySelectionResult {
         }
 
         const existing = await db.dailySelections.get(date);
+        const existingIds = existing?.taskIds ?? [];
 
-        // 已在今日选择中：幂等返回，不占新名额
-        if (existing && existing.taskIds.includes(taskId)) {
-          return existing;
+        // 清理远端删除/旧备份留下的悬空引用，避免幽灵记录占满三个名额。
+        const existingTasks = await db.tasks.bulkGet(existingIds);
+        const validIds = existingIds.filter((_id, index) => {
+          const item = existingTasks[index];
+          return item !== undefined && !item.deleted;
+        });
+        if (validIds.length !== existingIds.length) {
+          await db.dailySelections.put({ date, taskIds: validIds });
         }
 
-        const currentIds = existing?.taskIds ?? [];
-        if (currentIds.length >= MAX_DAILY_TASKS) {
+        // 已在今日选择中：幂等返回，不占新名额
+        if (validIds.includes(taskId)) {
+          return { date, taskIds: validIds };
+        }
+
+        if (validIds.length >= MAX_DAILY_TASKS) {
           throw new DailySelectionLimitError(date, taskId, MAX_DAILY_TASKS);
         }
 
-        const next: DailySelection = { date, taskIds: [...currentIds, taskId] };
+        const next: DailySelection = { date, taskIds: [...validIds, taskId] };
         await db.dailySelections.put(next);
         return next;
       });
@@ -135,7 +146,7 @@ export function useDailySelection(activeDate: string): UseDailySelectionResult {
       const fetched = await db.tasks.bulkGet(ids);
       const validIds = ids.filter((_id, index) => {
         const task = fetched[index];
-        return task !== undefined && !isTaskDone(task);
+        return task !== undefined && !task.deleted && !isTaskDone(task);
       });
 
       // 全部无效则清空当天选择
@@ -151,7 +162,7 @@ export function useDailySelection(activeDate: string): UseDailySelectionResult {
   return {
     date: activeDate,
     selection,
-    taskIds: selection?.taskIds ?? [],
+    taskIds: selection?.taskIds ?? EMPTY_TASK_IDS,
     loading,
     error,
     maxTasks: MAX_DAILY_TASKS,

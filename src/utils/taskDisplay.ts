@@ -46,9 +46,9 @@ export function isTaskDone(task: Task): boolean {
   return (task as Task & { isCompleted?: boolean }).isCompleted === true;
 }
 
-/** 已逾期：未完成且 DDL 早于当前时间（已完成的任务永远不算逾期） */
-export function isOverdue(task: Task): boolean {
-  return !isTaskDone(task) && dayjs(task.deadline).isBefore(dayjs());
+/** 已逾期：未完成且 DDL 早于给定时间（已完成的任务永远不算逾期） */
+export function isOverdue(task: Task, now: Date = new Date()): boolean {
+  return !isTaskDone(task) && dayjs(task.deadline).isBefore(dayjs(now));
 }
 
 /** 读取子任务（旧数据无该字段时返回空数组） */

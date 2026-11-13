@@ -3,14 +3,19 @@
   "private": true,
   "version": "0.3.0",
   "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.119.0",
     "dayjs": "^1.11.23",
     "dexie": "^4.4.7",
     "echarts": "^6.1.0",
