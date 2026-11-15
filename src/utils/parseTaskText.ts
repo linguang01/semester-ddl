@@ -39,8 +39,19 @@ function cn2num(text: string): number | null {
   if (/^\d{1,2}$/.test(s)) return Number(s);
 
   const CN: Record<string, number> = {
-    零: 0, 〇: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4,
-    五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10,
+    零: 0,
+    〇: 0,
+    一: 1,
+    二: 2,
+    两: 2,
+    三: 3,
+    四: 4,
+    五: 5,
+    六: 6,
+    七: 7,
+    八: 8,
+    九: 9,
+    十: 10,
   };
   if (/^[零〇一二两三四五六七八九十]$/.test(s)) return CN[s];
   if (/^十[一二三四五六七八九]$/.test(s)) return 10 + CN[s[1]];
@@ -81,7 +92,9 @@ function extractHours(text: string): Found<number> | null {
   if (m) return { value: 0.5, raw: m[0] };
 
   // 4) 中文数字：两个小时 / 三个钟
-  m = text.match(new RegExp(`${HOUR_PREFIX}\\s*([零〇一二两三四五六七八九十]+)\\s*个?\\s*(?:小时|钟头|个钟)`));
+  m = text.match(
+    new RegExp(`${HOUR_PREFIX}\\s*([零〇一二两三四五六七八九十]+)\\s*个?\\s*(?:小时|钟头|个钟)`),
+  );
   if (m) {
     const n = cn2num(m[1]);
     if (n !== null && n > 0 && n <= 100) return { value: n, raw: m[0] };
@@ -128,7 +141,10 @@ function cleanTitle(rest: string): string {
   title = title.replace(/^(?:提交|上交|交)(?=.{2,})/, '').trim();
 
   // 去掉「截止/截至」：句首（下周三截止交X）或句尾（X下周三截止）都可能出现
-  title = title.replace(/^(?:截止|截至)/, '').replace(/(?:截止|截至)$/, '').trim();
+  title = title
+    .replace(/^(?:截止|截至)/, '')
+    .replace(/(?:截止|截至)$/, '')
+    .trim();
 
   return title;
 }

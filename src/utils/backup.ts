@@ -1,7 +1,9 @@
 import dayjs from 'dayjs';
 import { db } from '../db/database';
 import { isDateKey } from './date';
+import { downloadText } from './download';
 import { isTaskId, taskIdFromLegacy } from './taskId';
+import { MAX_TASK_HOURS, MIN_TASK_HOURS } from './taskLimits';
 import { MAX_SUBTASKS, normalizeSubTasks } from './subTasks';
 import { queueTaskPush } from '../lib/sync';
 import type { DailySelection, Task, TaskPriority, TaskStatus, TaskType } from '../types';
@@ -70,23 +72,9 @@ function timeStamp(): string {
   return dayjs().format('YYYY-MM-DD-HHmm');
 }
 
-/** 通过 Blob + Object URL 触发浏览器下载，全部在客户端完成 */
+/** 通过公共下载工具输出 JSON（不再各自维护 a[download] 逻辑） */
 function downloadJson(filename: string, payload: unknown): void {
-  const blob = new Blob([JSON.stringify(payload, null, 2)], {
-    type: 'application/json',
-  });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-
-  link.href = url;
-  link.download = filename;
-  link.rel = 'noopener';
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-
-  // 延迟释放，避免部分浏览器还没来得及开始下载
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  downloadText(filename, JSON.stringify(payload, null, 2), 'application/json');
 }
 
 async function readAllData(): Promise<{
@@ -132,9 +120,14 @@ export async function downloadPreImportBackup(): Promise<void> {
   downloadJson(`导入前自动备份-${timeStamp()}.json`, createPayload(tasks, dailySelections));
 }
 
-/** 归一化可选的小时数：非数字/负数一律视为未填写 */
+/**
+ * 归一化可选的小时数：非数字/负数一律视为未填写。
+ * 超过上限的值按上限截断而不是丢弃 —— 丢弃会把导入数据静默变成 0，
+ * 截断至少保留「这确实是个很长的任务」这一信息。
+ */
 function normalizeHours(raw: unknown): number | undefined {
-  return typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 ? raw : undefined;
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || raw < MIN_TASK_HOURS) return undefined;
+  return Math.min(raw, MAX_TASK_HOURS);
 }
 
 function normalizeTask(raw: unknown): Task | null {
@@ -229,11 +222,7 @@ export function parseBackupText(text: string): ParsedBackup {
   }
 
   const data = parsed.data;
-  if (
-    !isRecord(data) ||
-    !Array.isArray(data.tasks) ||
-    !Array.isArray(data.dailySelections)
-  ) {
+  if (!isRecord(data) || !Array.isArray(data.tasks) || !Array.isArray(data.dailySelections)) {
     throw new BackupError('备份数据格式不正确');
   }
 

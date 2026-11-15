@@ -67,9 +67,7 @@ export function SubTaskRing({ task }: SubTaskRingProps) {
       {/* 全部完成时在圆环右侧补一个对勾标记 */}
       <span
         className={`text-[11px] font-medium tabular-nums ${
-          allDone
-            ? 'text-emerald-600 dark:text-emerald-400'
-            : 'text-slate-400 dark:text-slate-500'
+          allDone ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'
         }`}
       >
         {allDone && <span aria-hidden="true">✓ </span>}

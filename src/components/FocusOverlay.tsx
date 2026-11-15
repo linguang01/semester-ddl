@@ -61,7 +61,7 @@ export function FocusOverlay({
           </>
         ) : (
           <>
-            <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
+            <p className="text-xs font-medium tracking-[0.2em] text-slate-400 uppercase dark:text-slate-500">
               专注中
             </p>
             <h2 className="mt-1 truncate text-base font-semibold text-slate-900 dark:text-slate-100">
@@ -69,7 +69,7 @@ export function FocusOverlay({
             </h2>
 
             {/* tabular-nums 避免数字跳动导致布局抖动 */}
-            <div className="mt-5 text-6xl font-semibold tabular-nums tracking-tight text-slate-900 dark:text-slate-100">
+            <div className="mt-5 text-6xl font-semibold tracking-tight text-slate-900 tabular-nums dark:text-slate-100">
               {formatSeconds(remainingSeconds)}
             </div>
 

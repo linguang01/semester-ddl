@@ -33,6 +33,9 @@ export function DdlProgressBar({ task, now, showPublish = false }: DdlProgressBa
   // 进度条颜色：逾期深红、紧急红、正常蓝
   const fillClass = p.overdue ? 'bg-rose-700' : p.urgent ? 'bg-rose-500' : 'bg-indigo-500';
 
+  // 文案只算一次：既要渲染，也要给读屏软件当进度条的 accessible name
+  const remainText = getRemainText(p);
+
   return (
     <span className="mt-1.5 block">
       <span className="flex items-center justify-between gap-2 text-[11px] leading-4">
@@ -41,10 +44,11 @@ export function DdlProgressBar({ task, now, showPublish = false }: DdlProgressBa
             发布 {formatPublishDate(p.createdAt)}
           </span>
         )}
-        <span className={`tabular-nums ${textClass}`}>{getRemainText(p)}</span>
+        <span className={`tabular-nums ${textClass}`}>{remainText}</span>
       </span>
       <span
         role="progressbar"
+        aria-label={`DDL 进度：${remainText}`}
         aria-valuenow={Math.round(p.percent)}
         aria-valuemin={0}
         aria-valuemax={100}

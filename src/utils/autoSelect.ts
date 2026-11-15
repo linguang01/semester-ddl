@@ -64,11 +64,7 @@ function isCandidate(task: Task, now: dayjs.Dayjs): boolean {
  *    因此把 0 视为“未知”，排在所有已知耗时之后。
  * 4. 精确剩余时间 —— 兜底，保证同分下结果确定、稳定。
  */
-export function autoSelectTasks(
-  tasks: Task[],
-  limit: number,
-  now: Date = new Date(),
-): string[] {
+export function autoSelectTasks(tasks: Task[], limit: number, now: Date = new Date()): string[] {
   const nowDayjs = dayjs(now);
 
   // 把未知耗时（0）映射成极大值，让它们排在“已知耗时”后面

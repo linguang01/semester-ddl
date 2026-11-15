@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import dayjs from 'dayjs';
 import 'dayjs/locale/zh-cn';
 import App from './App';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { initPwa } from './pwa';
 import './index.css';
 
@@ -13,6 +14,9 @@ initPwa();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    {/* 顶层兜底：任何渲染异常都收敛成可恢复页面，而不是白屏 */}
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </React.StrictMode>,
 );

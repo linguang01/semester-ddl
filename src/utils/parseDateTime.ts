@@ -149,8 +149,7 @@ function resolveTime(text: string): ResolvedTime | null {
     const hour = chineseToNumber(clock[2]);
     if (hour === null) return null;
     // 「点半」= 30 分；「点Y分」= Y 分；只有「点」= 0 分
-    const minute =
-      clock[3] === '半' ? 30 : clock[4] !== undefined ? chineseToNumber(clock[4]) : 0;
+    const minute = clock[3] === '半' ? 30 : clock[4] !== undefined ? chineseToNumber(clock[4]) : 0;
     if (minute === null || !isValidHourMinute(hour, minute)) return null;
     return { hour: adjustHour(hour, clock[1]), minute, raw: clock[0] };
   }

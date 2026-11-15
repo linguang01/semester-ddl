@@ -59,7 +59,11 @@ function handleNeedReload() {
 
   const now = Date.now();
   // 刚打开应用（启动阶段）或刚手动检查出更新：立即刷新，不等待
-  if (document.visibilityState === 'hidden' || now - pageLoadedAt < LAUNCH_GRACE_MS || now < immediateReloadUntil) {
+  if (
+    document.visibilityState === 'hidden' ||
+    now - pageLoadedAt < LAUNCH_GRACE_MS ||
+    now < immediateReloadUntil
+  ) {
     reloadPage();
     return;
   }

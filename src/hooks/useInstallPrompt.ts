@@ -19,8 +19,8 @@ function detectStandalone(): boolean {
   if (typeof window === 'undefined') return false;
 
   const displayModes = ['standalone', 'fullscreen', 'minimal-ui'];
-  const launchedAsApp = displayModes.some((mode) =>
-    window.matchMedia(`(display-mode: ${mode})`).matches,
+  const launchedAsApp = displayModes.some(
+    (mode) => window.matchMedia(`(display-mode: ${mode})`).matches,
   );
 
   return launchedAsApp || (navigator as Navigator & { standalone?: boolean }).standalone === true;

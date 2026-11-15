@@ -16,7 +16,13 @@ interface SubTaskSheetProps {
   notify: Notify;
 }
 
-export function SubTaskSheet({ task, onClose, onUpdateSubTasks, onEdit, notify }: SubTaskSheetProps) {
+export function SubTaskSheet({
+  task,
+  onClose,
+  onUpdateSubTasks,
+  onEdit,
+  notify,
+}: SubTaskSheetProps) {
   // 本地乐观状态：勾选立即反映到 UI，同一时间只允许一笔写入，避免乱序覆盖。
   const [items, setItems] = useState<SubTask[]>(() => task.subTasks ?? []);
   const [newTitle, setNewTitle] = useState('');
@@ -110,10 +116,15 @@ export function SubTaskSheet({ task, onClose, onUpdateSubTasks, onEdit, notify }
 
         <div className="flex items-center justify-between">
           <div className="min-w-0">
-            <h2 id="subtask-sheet-title" className="text-base font-semibold text-slate-900 dark:text-slate-100">
+            <h2
+              id="subtask-sheet-title"
+              className="text-base font-semibold text-slate-900 dark:text-slate-100"
+            >
               子任务
             </h2>
-            <p className="mt-0.5 truncate text-xs text-slate-400 dark:text-slate-500">{task.title}</p>
+            <p className="mt-0.5 truncate text-xs text-slate-400 dark:text-slate-500">
+              {task.title}
+            </p>
           </div>
           <button
             type="button"
@@ -128,7 +139,13 @@ export function SubTaskSheet({ task, onClose, onUpdateSubTasks, onEdit, notify }
         {/* 进度概览 */}
         <div className="mt-3 flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3 dark:bg-slate-800/60">
           <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-            {saving ? '保存中…' : total === 0 ? '还没有子任务' : completed === total ? '全部完成 🎉' : '已完成'}
+            {saving
+              ? '保存中…'
+              : total === 0
+                ? '还没有子任务'
+                : completed === total
+                  ? '全部完成 🎉'
+                  : '已完成'}
           </span>
           <span
             className={`text-sm font-semibold tabular-nums ${
@@ -170,7 +187,7 @@ export function SubTaskSheet({ task, onClose, onUpdateSubTasks, onEdit, notify }
               </button>
 
               <p
-                className={`min-w-0 flex-1 break-words text-sm ${
+                className={`min-w-0 flex-1 text-sm break-words ${
                   item.isCompleted
                     ? 'text-slate-400 line-through dark:text-slate-500'
                     : 'text-slate-800 dark:text-slate-200'
@@ -213,7 +230,7 @@ export function SubTaskSheet({ task, onClose, onUpdateSubTasks, onEdit, notify }
             maxLength={60}
             placeholder="添加子任务，回车确认"
             aria-label="新子任务标题"
-            className="h-12 min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-indigo-500 dark:focus:bg-slate-800 dark:focus:ring-indigo-500/20"
+            className="h-12 min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 transition outline-none placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-indigo-500 dark:focus:bg-slate-800 dark:focus:ring-indigo-500/20"
           />
           <button
             type="button"

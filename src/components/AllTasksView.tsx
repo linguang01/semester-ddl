@@ -145,8 +145,9 @@ export const AllTasksView = memo(function AllTasksView({
         <ul aria-label="事项列表" className="space-y-2">
           {filtered.map((task) => {
             const done = isTaskDone(task);
-            // 已完成绝不显示逾期红（isOverdue 内部已拦截，这里再做一次保险）
-            const overdue = !done && isOverdue(task);
+            // 逾期判断必须和进度条用同一个「现在」：之前这里不传 now，
+            // 每 60 秒刷新时会出现「进度条显示还剩 1 小时、徽标已标逾期」的自相矛盾。
+            const overdue = !done && isOverdue(task, now);
             const isToday = todayIdSet.has(task.id);
             const hasSubTasks = subTaskProgress(task).total > 0;
 
@@ -169,7 +170,7 @@ export const AllTasksView = memo(function AllTasksView({
                     aria-checked={done}
                     aria-label={`${done ? '恢复待办' : '标记完成'}：${task.title}`}
                     onClick={() => onToggle(task)}
-                    className="-ml-1.5 -mt-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
+                    className="-mt-1.5 -ml-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
                   >
                     <span
                       className={`flex h-[22px] w-[22px] items-center justify-center rounded-md border-2 transition ${
@@ -189,7 +190,7 @@ export const AllTasksView = memo(function AllTasksView({
                   >
                     <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
                       <span
-                        className={`break-words text-sm font-medium leading-5 ${
+                        className={`text-sm leading-5 font-medium break-words ${
                           done
                             ? 'text-slate-400 line-through dark:text-slate-500'
                             : 'text-slate-900 dark:text-slate-100'

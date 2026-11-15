@@ -1,16 +1,14 @@
 import { useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import dayjs from 'dayjs';
+import { TaskConflictError } from '../hooks/useTasks';
 import { useDialog } from '../hooks/useDialog';
 import type { NewTaskInput, SubTask, Task, TaskPriority, TaskType, TaskUpdate } from '../types';
 import { PRIORITY_LABEL, TASK_PRIORITIES, TASK_TYPES, TYPE_LABEL } from '../utils/taskDisplay';
 import { parseDateTime } from '../utils/parseDateTime';
 import { parseTaskText, type TaskTextParseResult } from '../utils/parseTaskText';
 import { describeError } from '../utils/error';
-import {
-  DATETIME_INPUT_FORMAT,
-  deadlineAfterDays,
-  defaultNewTaskDeadline,
-} from '../utils/date';
+import { MAX_TASK_HOURS, MIN_TASK_HOURS } from '../utils/taskLimits';
+import { DATETIME_INPUT_FORMAT, deadlineAfterDays, defaultNewTaskDeadline } from '../utils/date';
 import { ConfirmDialog } from './ConfirmDialog';
 import type { Notify } from './Toast';
 import { WandIcon, XIcon } from './icons';
@@ -20,7 +18,8 @@ interface TaskFormSheetProps {
   task: Task | null;
   onClose: () => void;
   onCreate: (input: NewTaskInput) => Promise<void>;
-  onUpdate: (id: string, patch: TaskUpdate) => Promise<void>;
+  /** expectedUpdatedAt 为打开表单时看到的版本，用于保存前的乐观并发校验 */
+  onUpdate: (id: string, patch: TaskUpdate, expectedUpdatedAt?: string) => Promise<void>;
   onDelete: (task: Task) => Promise<void>;
   notify: Notify;
 }
@@ -50,7 +49,8 @@ const CUSTOM_DAYS_MIN = 1;
 const CUSTOM_DAYS_MAX = 365;
 
 /** 快捷按钮 / 天数输入框的统一样式 */
-const QUICK_BTN_CLASS = 'h-10 rounded-xl text-xs font-medium transition active:scale-[0.98] disabled:opacity-40';
+const QUICK_BTN_CLASS =
+  'h-10 rounded-xl text-xs font-medium transition active:scale-[0.98] disabled:opacity-40';
 
 const DAYS_INPUT_CLASS =
   'h-10 w-full min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-indigo-500 dark:focus:bg-slate-800 dark:focus:ring-indigo-500/20';
@@ -65,6 +65,9 @@ export function TaskFormSheet({
 }: TaskFormSheetProps) {
   const isEditing = task !== null;
   const isEditingDone = task?.status === 'done';
+  // 打开表单那一刻的版本号：保存时交给数据层做乐观并发校验，
+  // 若期间已被其他设备改过，就不会静默覆盖，而是弹冲突确认。
+  const baseUpdatedAt = task?.updatedAt;
 
   const [title, setTitle] = useState(task?.title ?? '');
   const [type, setType] = useState<TaskType>(task?.type ?? 'homework');
@@ -72,8 +75,8 @@ export function TaskFormSheet({
   const [deadline, setDeadline] = useState(
     task
       ? dayjs(task.deadline).format(DATETIME_INPUT_FORMAT)
-      // 新增任务默认「今天 16:30」；今天 16:30 已过则顺延到明天 16:30
-      : defaultNewTaskDeadline().format(DATETIME_INPUT_FORMAT),
+      : // 新增任务默认「今天 16:30」；今天 16:30 已过则顺延到明天 16:30
+        defaultNewTaskDeadline().format(DATETIME_INPUT_FORMAT),
   );
   // 自定义天数输入框（回车 / 点确认生效）
   const [customDays, setCustomDays] = useState('');
@@ -92,6 +95,8 @@ export function TaskFormSheet({
   const [errors, setErrors] = useState<FormErrors>({});
   const [submitting, setSubmitting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // 版本冲突：库里已有更新的版本，先让用户选「覆盖」还是「放弃」
+  const [conflict, setConflict] = useState<{ latest: Task; payload: NewTaskInput } | null>(null);
   // 智能录入：原始输入 + 解析结果预览
   const [smartText, setSmartText] = useState('');
   const [smartPreview, setSmartPreview] = useState<TaskTextParseResult | null>(null);
@@ -217,7 +222,43 @@ export function TaskFormSheet({
     setSubTasks((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+  /**
+   * 统一提交入口。
+   * force=true 表示用户已经在冲突提示里明确选择「覆盖」，
+   * 此时不再携带版本号，等价于「我的版本就是最新」。
+   */
+  const commit = async (payload: NewTaskInput, force: boolean) => {
+    if (submitLock.current) return;
+
+    submitLock.current = true;
+    setSubmitting(true);
+
+    try {
+      if (task) {
+        await onUpdate(task.id, payload, force ? undefined : baseUpdatedAt);
+      } else {
+        await onCreate(payload);
+      }
+
+      submitLock.current = false;
+      setSubmitting(false);
+      onClose();
+    } catch (error) {
+      submitLock.current = false;
+      setSubmitting(false);
+
+      // 版本冲突不能只弹一个 toast 了事 —— 那等于告诉用户「没存上」却把选择权收走了。
+      // 保持表单打开，把最新版本摆出来，让用户在「覆盖 / 放弃」之间显式选一次。
+      if (error instanceof TaskConflictError) {
+        setConflict({ latest: error.latest, payload });
+        return;
+      }
+
+      notify(describeError(error), 'error');
+    }
+  };
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (submitLock.current) return;
 
@@ -237,8 +278,15 @@ export function TaskFormSheet({
     }
 
     const parsedHours = Number(hours);
-    if (!hours.trim() || !Number.isFinite(parsedHours) || parsedHours <= 0 || parsedHours > 100) {
-      nextErrors.hours = '预计耗时需大于 0 且不超过 100 小时';
+    // 下限放到 0：历史导入的任务可能存在「未估算」，若这里强制 >0，
+    // 这类任务只改标题也会被耗时校验拦住，等于永远存不了。
+    if (
+      !hours.trim() ||
+      !Number.isFinite(parsedHours) ||
+      parsedHours < MIN_TASK_HOURS ||
+      parsedHours > MAX_TASK_HOURS
+    ) {
+      nextErrors.hours = `预计耗时需在 ${MIN_TASK_HOURS}~${MAX_TASK_HOURS} 小时之间`;
     }
 
     // 实际耗时选填：留空表示未统计；填写则与预计耗时同一量级约束
@@ -246,8 +294,8 @@ export function TaskFormSheet({
     const trimmedActual = actualHours.trim();
     if (trimmedActual) {
       const value = Number(trimmedActual);
-      if (!Number.isFinite(value) || value <= 0 || value > 100) {
-        nextErrors.actualHours = '实际耗时需大于 0 且不超过 100 小时';
+      if (!Number.isFinite(value) || value < MIN_TASK_HOURS || value > MAX_TASK_HOURS) {
+        nextErrors.actualHours = `实际耗时需在 ${MIN_TASK_HOURS}~${MAX_TASK_HOURS} 小时之间`;
       } else {
         parsedActualHours = value;
       }
@@ -256,11 +304,8 @@ export function TaskFormSheet({
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
-    submitLock.current = true;
-    setSubmitting(true);
-
-    try {
-      const payload: NewTaskInput = {
+    void commit(
+      {
         title: finalTitle,
         type,
         course: course.trim(),
@@ -269,22 +314,9 @@ export function TaskFormSheet({
         actualHours: parsedActualHours,
         priority,
         subTasks,
-      };
-
-      if (task) {
-        await onUpdate(task.id, payload);
-      } else {
-        await onCreate(payload);
-      }
-
-      submitLock.current = false;
-      setSubmitting(false);
-      onClose();
-    } catch (error) {
-      submitLock.current = false;
-      setSubmitting(false);
-      notify(describeError(error), 'error');
-    }
+      },
+      false,
+    );
   };
 
   const handleDelete = () => {
@@ -335,7 +367,10 @@ export function TaskFormSheet({
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-slate-200 dark:bg-slate-700" />
 
         <div className="flex items-center justify-between">
-          <h2 id="task-form-title" className="text-base font-semibold text-slate-900 dark:text-slate-100">
+          <h2
+            id="task-form-title"
+            className="text-base font-semibold text-slate-900 dark:text-slate-100"
+          >
             {isEditing ? '编辑事项' : '新增事项'}
           </h2>
           <button
@@ -364,7 +399,7 @@ export function TaskFormSheet({
               autoFocus
               maxLength={120}
               placeholder="例如：明天下午3点交高数作业，预计2小时，高优先级"
-              className="mt-2 h-12 w-full min-w-0 max-w-full rounded-xl border border-indigo-200 bg-white px-3 text-base text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-indigo-500/40 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-indigo-500 dark:focus:ring-indigo-500/20"
+              className="mt-2 h-12 w-full max-w-full min-w-0 rounded-xl border border-indigo-200 bg-white px-3 text-base text-slate-900 transition outline-none placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-indigo-500/40 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-indigo-500 dark:focus:ring-indigo-500/20"
             />
             {smartPreview && (
               <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
@@ -531,9 +566,7 @@ export function TaskFormSheet({
           <p className="mt-1.5 text-[11px] text-slate-400 dark:text-slate-500">
             快捷设置一律取「今天 + N 天」的 16:30，会覆盖上方手动选择的时间。
           </p>
-          {errors.deadline && (
-            <p className="mt-1 text-[11px] text-rose-600">{errors.deadline}</p>
-          )}
+          {errors.deadline && <p className="mt-1 text-[11px] text-rose-600">{errors.deadline}</p>}
           {showHistoricalHint && (
             <p className="mt-1 rounded-lg bg-amber-50 px-2.5 py-2 text-[11px] leading-relaxed text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
               这是已完成的历史事项，DDL 已过去，保留原时间即可。
@@ -550,13 +583,13 @@ export function TaskFormSheet({
                 type="number"
                 inputMode="decimal"
                 step="0.5"
-                min="0.5"
-                max="100"
+                min={MIN_TASK_HOURS}
+                max={MAX_TASK_HOURS}
                 value={hours}
                 onChange={(event) => setHours(event.target.value)}
                 className={`${INPUT_CLASS} mt-0 pr-14`}
               />
-              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 dark:text-slate-500">
+              <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-xs text-slate-400 dark:text-slate-500">
                 小时
               </span>
             </span>
@@ -573,14 +606,14 @@ export function TaskFormSheet({
                 type="number"
                 inputMode="decimal"
                 step="0.5"
-                min="0.5"
-                max="100"
+                min={MIN_TASK_HOURS}
+                max={MAX_TASK_HOURS}
                 value={actualHours}
                 onChange={(event) => setActualHours(event.target.value)}
                 placeholder="完成后填写"
                 className={`${INPUT_CLASS} mt-0 pr-14`}
               />
-              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 dark:text-slate-500">
+              <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-xs text-slate-400 dark:text-slate-500">
                 小时
               </span>
             </span>
@@ -699,6 +732,30 @@ export function TaskFormSheet({
           tone="danger"
           onConfirm={() => void handleConfirmDelete()}
           onCancel={() => setConfirmDelete(false)}
+        />
+      )}
+
+      {conflict && (
+        <ConfirmDialog
+          title="这条事项已被修改"
+          message={
+            conflict.latest.deleted
+              ? '这条事项已在其他设备被删除。继续保存会让它重新出现；放弃则关闭表单并保持删除状态。'
+              : `你在编辑期间，这条事项已在其他设备或标签页被改过（最新标题「${conflict.latest.title}」）。继续保存会用当前表单内容覆盖它。`
+          }
+          confirmText="覆盖保存"
+          cancelText="放弃修改"
+          tone="danger"
+          onConfirm={() => {
+            const pendingPayload = conflict.payload;
+            setConflict(null);
+            void commit(pendingPayload, true);
+          }}
+          onCancel={() => {
+            setConflict(null);
+            onClose();
+            notify('已放弃本次修改，界面已同步为最新版本', 'info');
+          }}
         />
       )}
     </div>

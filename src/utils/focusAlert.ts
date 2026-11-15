@@ -54,30 +54,33 @@ export function playFocusCompleteSound(): void {
 
   try {
     // resume：浏览器可能因自动播放策略把 context 挂起，先恢复再发声
-    void ctx.resume().then(() => {
-      // C5 → E5 → G5 三个上行音符，短促明快
-      const notes = [523.25, 659.25, 783.99];
-      notes.forEach((freq, index) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        const startAt = ctx.currentTime + index * 0.18;
+    void ctx
+      .resume()
+      .then(() => {
+        // C5 → E5 → G5 三个上行音符，短促明快
+        const notes = [523.25, 659.25, 783.99];
+        notes.forEach((freq, index) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          const startAt = ctx.currentTime + index * 0.18;
 
-        osc.type = 'sine';
-        osc.frequency.value = freq;
+          osc.type = 'sine';
+          osc.frequency.value = freq;
 
-        // 指数渐入渐出包络，避免爆音
-        gain.gain.setValueAtTime(0.0001, startAt);
-        gain.gain.exponentialRampToValueAtTime(0.28, startAt + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.16);
+          // 指数渐入渐出包络，避免爆音
+          gain.gain.setValueAtTime(0.0001, startAt);
+          gain.gain.exponentialRampToValueAtTime(0.28, startAt + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.16);
 
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(startAt);
-        osc.stop(startAt + 0.18);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(startAt);
+          osc.stop(startAt + 0.18);
+        });
+      })
+      .catch(() => {
+        // 自动播放策略阻止时静默跳过
       });
-    }).catch(() => {
-      // 自动播放策略阻止时静默跳过
-    });
   } catch {
     /* ignore */
   }

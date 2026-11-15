@@ -94,7 +94,10 @@ export function AuthSheet({ auth, notify, onClose }: AuthSheetProps) {
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-slate-200 dark:bg-slate-700" />
 
         <div className="flex items-center justify-between">
-          <h2 id="auth-title" className="text-base font-semibold text-slate-900 dark:text-slate-100">
+          <h2
+            id="auth-title"
+            className="text-base font-semibold text-slate-900 dark:text-slate-100"
+          >
             {mode === 'signup' ? '注册账号' : '登录账号'}
           </h2>
           <button
@@ -136,7 +139,9 @@ export function AuthSheet({ auth, notify, onClose }: AuthSheetProps) {
           </label>
 
           <label className="mt-3 block">
-            <span className="text-[11px] text-slate-500 dark:text-slate-400">密码（至少 6 位）</span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400">
+              密码（至少 6 位）
+            </span>
             <input
               type="password"
               value={password}

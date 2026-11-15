@@ -13,7 +13,7 @@ export const BottomNav = memo(function BottomNav({ active, onChange, onCreate }:
   return (
     <nav
       aria-label="底部导航"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 shadow-lift backdrop-blur dark:border-slate-800 dark:bg-slate-900/95"
+      className="shadow-lift fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95"
     >
       <div
         className="mx-auto grid max-w-md grid-cols-5"
@@ -24,7 +24,9 @@ export const BottomNav = memo(function BottomNav({ active, onChange, onCreate }:
           onClick={() => onChange('all')}
           aria-current={active === 'all' ? 'page' : undefined}
           className={`flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium transition ${
-            active === 'all' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'
+            active === 'all'
+              ? 'text-indigo-600 dark:text-indigo-400'
+              : 'text-slate-400 dark:text-slate-500'
           }`}
         >
           <ListIcon className="h-[22px] w-[22px]" />
@@ -36,7 +38,9 @@ export const BottomNav = memo(function BottomNav({ active, onChange, onCreate }:
           onClick={() => onChange('stats')}
           aria-current={active === 'stats' ? 'page' : undefined}
           className={`flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium transition ${
-            active === 'stats' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'
+            active === 'stats'
+              ? 'text-indigo-600 dark:text-indigo-400'
+              : 'text-slate-400 dark:text-slate-500'
           }`}
         >
           <ChartIcon className="h-[22px] w-[22px]" />
@@ -50,7 +54,9 @@ export const BottomNav = memo(function BottomNav({ active, onChange, onCreate }:
           onClick={() => onChange('calendar')}
           aria-current={active === 'calendar' ? 'page' : undefined}
           className={`flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium transition ${
-            active === 'calendar' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'
+            active === 'calendar'
+              ? 'text-indigo-600 dark:text-indigo-400'
+              : 'text-slate-400 dark:text-slate-500'
           }`}
         >
           <CalendarIcon className="h-[22px] w-[22px]" />
@@ -62,7 +68,9 @@ export const BottomNav = memo(function BottomNav({ active, onChange, onCreate }:
           onClick={() => onChange('today')}
           aria-current={active === 'today' ? 'page' : undefined}
           className={`flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium transition ${
-            active === 'today' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'
+            active === 'today'
+              ? 'text-indigo-600 dark:text-indigo-400'
+              : 'text-slate-400 dark:text-slate-500'
           }`}
         >
           <SunIcon className="h-[22px] w-[22px]" />
@@ -74,7 +82,7 @@ export const BottomNav = memo(function BottomNav({ active, onChange, onCreate }:
         type="button"
         onClick={onCreate}
         aria-label="新增事项"
-        className="absolute left-1/2 top-0 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-slate-900 text-white shadow-lift ring-4 ring-slate-100 transition active:scale-95 dark:bg-slate-100 dark:text-slate-900 dark:shadow-slate-950/50 dark:ring-slate-950"
+        className="shadow-lift absolute top-0 left-1/2 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-slate-900 text-white ring-4 ring-slate-100 transition active:scale-95 dark:bg-slate-100 dark:text-slate-900 dark:shadow-slate-950/50 dark:ring-slate-950"
       >
         <PlusIcon className="h-6 w-6" />
       </button>

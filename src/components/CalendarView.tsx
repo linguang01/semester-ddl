@@ -193,7 +193,7 @@ export const CalendarView = memo(function CalendarView({
                   isSelected
                     ? 'bg-indigo-600 text-white shadow-sm'
                     : isToday
-                      ? 'bg-indigo-50 text-indigo-600 ring-1 ring-inset ring-indigo-300 dark:bg-indigo-500/15 dark:text-indigo-300 dark:ring-indigo-500/40'
+                      ? 'bg-indigo-50 text-indigo-600 ring-1 ring-indigo-300 ring-inset dark:bg-indigo-500/15 dark:text-indigo-300 dark:ring-indigo-500/40'
                       : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
                 }`}
               >
@@ -276,7 +276,7 @@ export const CalendarView = memo(function CalendarView({
                       aria-checked={done}
                       aria-label={`${done ? '恢复待办' : '标记完成'}：${task.title}`}
                       onClick={() => onToggle(task)}
-                      className="-ml-1.5 -mt-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
+                      className="-mt-1.5 -ml-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
                     >
                       <span
                         className={`flex h-[22px] w-[22px] items-center justify-center rounded-md border-2 transition ${
@@ -296,7 +296,7 @@ export const CalendarView = memo(function CalendarView({
                     >
                       <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
                         <span
-                          className={`break-words text-sm font-medium leading-5 ${
+                          className={`text-sm leading-5 font-medium break-words ${
                             done
                               ? 'text-slate-400 line-through dark:text-slate-500'
                               : 'text-slate-900 dark:text-slate-100'

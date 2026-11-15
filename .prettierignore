@@ -1,0 +1,18 @@
+# 构建产物与依赖
+dist/
+node_modules/
+public/
+
+# 锁文件交给 npm 自己维护，格式化只会制造无意义 diff
+package-lock.json
+
+# 工具缓存 / 分享包
+.workbuddy/
+.trae-html-share-packages/
+.screenshots/
+
+# 单文件演示页（内联样式与外部 CDN，不参与工程格式化）
+ddl-card-demo.html
+
+# 文档按人写格式保留（表格、列表换行由作者控制）
+README.md

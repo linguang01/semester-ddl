@@ -26,11 +26,14 @@ export class SemesterDdlDatabase extends Dexie {
         dailySelections: 'date, *taskIds',
       })
       .upgrade(async (tx) => {
-        await tx.table('tasks').toCollection().modify((task: Task) => {
-          if (!task.updatedAt) {
-            task.updatedAt = task.createdAt;
-          }
-        });
+        await tx
+          .table('tasks')
+          .toCollection()
+          .modify((task: Task) => {
+            if (!task.updatedAt) {
+              task.updatedAt = task.createdAt;
+            }
+          });
       });
 
     // v3：旧备份可能带非 UUID 主键，Supabase uuid 列会导致整批同步失败。
@@ -70,7 +73,9 @@ export class SemesterDdlDatabase extends Dexie {
         const selections = await selectionsTable.toArray();
         for (const selection of selections) {
           const taskIds = Array.from(
-            new Set(selection.taskIds.map((id) => idMap.get(id) ?? id).filter((id) => activeIds.has(id))),
+            new Set(
+              selection.taskIds.map((id) => idMap.get(id) ?? id).filter((id) => activeIds.has(id)),
+            ),
           ).slice(0, 3);
 
           if (taskIds.length === 0) await selectionsTable.delete(selection.date);

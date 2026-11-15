@@ -25,20 +25,20 @@ export class DailySelectionLimitError extends Error {
   }
 }
 
+/**
+ * 每日选择读写层。
+ *
+ * 刻意只做「本机」：今日三件事不参与云端同步（见 README 已知限制），
+ * 因此不对外暴露 selection 原文、按日期直读、清空等仅供同步/调试使用的入口，
+ * 使用方要的只有「当前日期的 id 列表 + 三个写操作」。
+ */
 export interface UseDailySelectionResult {
-  /** 当前订阅的日期，YYYY-MM-DD */
-  date: string;
-  /** 该日期的选择记录；不存在时为 null */
-  selection: DailySelection | null;
-  /** 便捷字段：selection?.taskIds ?? [] */
+  /** 选中日期的任务 id 列表，长度不超过 MAX_DAILY_TASKS */
   taskIds: string[];
   loading: boolean;
   error: Error | null;
-  maxTasks: number;
-  getSelection: (date: string) => Promise<DailySelection | null>;
   addToSelection: (date: string, taskId: string) => Promise<DailySelection>;
   removeFromSelection: (date: string, taskId: string) => Promise<void>;
-  clearSelection: (date: string) => Promise<void>;
   /** 一键生成：用给定 id 列表整体覆盖某天的选择（去重、截断、过滤已删除/已完成） */
   replaceSelection: (date: string, taskIds: string[]) => Promise<void>;
 }
@@ -50,9 +50,8 @@ function assertDateKey(date: string): void {
 }
 
 /**
- * 每日三件事读写层。
- * 传入 activeDate 后，selection / taskIds 会通过 liveQuery 自动跟随数据库变化
- * （包括删除任务时的自动清理）。
+ * 传入 activeDate 后，当日选择会通过 liveQuery 自动跟随数据库变化
+ * （包括删除任务时的自动清理），跨天时随 activeDate 变更重新订阅。
  */
 export function useDailySelection(activeDate: string): UseDailySelectionResult {
   const {
@@ -64,12 +63,6 @@ export function useDailySelection(activeDate: string): UseDailySelectionResult {
     [activeDate],
     null,
   );
-
-  const getSelection = useCallback(async (date: string): Promise<DailySelection | null> => {
-    assertDateKey(date);
-    const record = await db.dailySelections.get(date);
-    return record ?? null;
-  }, []);
 
   const addToSelection = useCallback(
     async (date: string, taskId: string): Promise<DailySelection> => {
@@ -130,11 +123,6 @@ export function useDailySelection(activeDate: string): UseDailySelectionResult {
     });
   }, []);
 
-  const clearSelection = useCallback(async (date: string): Promise<void> => {
-    assertDateKey(date);
-    await db.dailySelections.delete(date);
-  }, []);
-
   const replaceSelection = useCallback(async (date: string, taskIds: string[]): Promise<void> => {
     assertDateKey(date);
 
@@ -160,16 +148,11 @@ export function useDailySelection(activeDate: string): UseDailySelectionResult {
   }, []);
 
   return {
-    date: activeDate,
-    selection,
     taskIds: selection?.taskIds ?? EMPTY_TASK_IDS,
     loading,
     error,
-    maxTasks: MAX_DAILY_TASKS,
-    getSelection,
     addToSelection,
     removeFromSelection,
-    clearSelection,
     replaceSelection,
   };
 }

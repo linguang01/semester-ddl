@@ -24,6 +24,19 @@ npm run preview
 
 构建会把 React、Supabase、Dexie/dayjs、ECharts 拆成独立 vendor 块；统计页仍按需加载，首屏不下载图表库。
 
+## 代码检查与格式化
+
+```bash
+npm run lint          # oxlint：0 warning / 0 error 才算过
+npm run lint:fix      # 自动修可修项
+npm run format        # Prettier 全量格式化（含 Tailwind class 排序）
+npm run format:check  # CI 用，只检查不写入
+```
+
+**为什么用 oxlint 而不是 ESLint**：本项目用 TypeScript 7，而 `typescript-eslint` 8.x 在启动时会直接抛错（`does not support TS 7.0`，见其 issue #10940），装上就等于装了个跑不起来的脚本，还会因为 peer 依赖冲突让 `npm install` 失败。oxlint 自带解析器、不依赖 TS 的 JS API，规则集覆盖了本项目真正在意的几条：`no-floating-promises`（漏 `catch` 的异步调用）、`rules-of-hooks`、`exhaustive-deps`、`only-export-components`、`no-unused-vars`。等 typescript-eslint 支持 TS ≥ 7.1 后，再决定是否切回。
+
+**Prettier 约定**：`printWidth: 100`、单引号、尾逗号、LF；`prettier-plugin-tailwindcss` 负责 class 顺序。`.prettierignore` 排除了 `README.md`（表格与换行由人控制）、锁文件、构建产物和演示单页。**首次全量格式化必须单独一个 commit**，否则 `git blame` 会被格式噪声淹没。
+
 ## 部署：用一个固定、国内可访问的 HTTPS 地址
 
 **先记住三条铁律（都是踩过的坑）：**
@@ -101,16 +114,19 @@ npm run preview
 
 ### 可选：启用 Supabase 云同步
 
-1. 在 Supabase 项目执行 [`supabase/schema.sql`](supabase/schema.sql)。不要跳过：其中包含 `(user_id, id)` 复合主键、RLS 和原子条件写函数 `sync_tasks`；旧版部署也要重新执行一次。
+1. 在 Supabase 项目执行 [`supabase/schema.sql`](supabase/schema.sql)。不要跳过：其中包含 `(user_id, id)` 复合主键、RLS、原子条件写函数 `sync_tasks`、`replica identity full`（Realtime 事件完整性）以及墓碑清理定时任务；**旧版部署必须重新执行一次**。
 2. 复制 [`.env.example`](.env.example) 为 `.env.local`，填入 `VITE_SUPABASE_URL` 与 `VITE_SUPABASE_ANON_KEY`。
 3. 重新构建/部署后在「设置 → 账号与同步」注册或登录。
 
+> 墓碑清理依赖 `pg_cron`。若未启用，脚本会 `RAISE NOTICE` 跳过（不影响其它语句），可在 Dashboard → Database → Extensions 启用后重跑末尾那段 SQL；不想装扩展就每季度手动执行一次文件末尾注释里的 `DELETE`。
+
 同步规则：
 
-- 本地写入优先，云端口失败不影响当前操作；网络恢复、回到前台、每 5 分钟会自动重试。
+- 本地写入优先，云端写入失败不影响当前操作；网络恢复、回到前台、每 5 分钟会自动重试，单次失败还会按 5s→10s→…→5 分钟退避补推。
 - `updatedAt` 新者胜；时间相同但内容冲突时固定采用远端，保证多设备最终收敛。
 - 云端写入通过数据库函数做**严格条件更新**，慢请求或并发请求不能把新数据回滚成旧值。
-- 删除使用软删除墓碑，其他设备拉取后会同时清理「今日三件事」里的引用。
+- 编辑表单保存时携带「打开表单时的版本」做乐观并发校验：期间被其他设备改过会弹「覆盖 / 放弃」，不再静默覆盖。
+- 删除使用软删除墓碑，其他设备拉取后会同时清理「今日三件事」里的引用；墓碑由云端定时清理（保留 90 天），本地墓碑不清。
 - 一个浏览器工作区只绑定一个账号。登录另一个账号时会停止同步并要求明确选择：复制本机任务并切换，或退出当前账号。
 
 ## 数据迁移：导出 / 导入
@@ -129,7 +145,7 @@ npm run preview
 
 ## 已知限制
 
-- **今日选择不跨设备同步**；任务支持云同步，但每日三件事仍是本机选择。
+- **今日选择不跨设备同步，且这是明确的产品决策（不做）**：「今日三件事」表达的是「此刻在这台设备上先做哪三件」的本地决策，跨设备同步只会制造无意义的互相覆盖。因此该模块只保留本机读写，不参与云端同步，也不对外暴露仅供同步使用的接口。
 - **云同步需要自行配置 Supabase**。未配置时仍可完整离线使用。
 - **本机工作区只绑定一个云账号**。切换账号需在冲突提示中明确选择“复制并切换”，或先导出备份后清理站点数据。
 - **清除浏览器站点数据会丢失本地数据**，无法找回，建议定期导出备份。
@@ -150,17 +166,20 @@ npm run typecheck
 - 同步合并：跨时区时间戳、远端/本地胜负、同时间戳冲突收敛；
 - 自然语言：下周日期、非法日期、2 月 31 日、深夜/中午时段；
 - 自动挑选：DDL 分桶 → 优先级 → 耗时的排序规则；
-- 进度口径：已完成拦截、逾期与剩余 24 小时切小时精度、自然日天数不向上取整。
+- 进度口径：已完成拦截、逾期与剩余 24 小时切小时精度、自然日天数不向上取整；
+- 统计口径：近 7 天按自然日落位、`isCompleted` 旧字段兼容、未知类型归入「其他」、本周预计/实际耗时聚合；
+- 云同步行完整性：整行才允许落库，Realtime 半行（只带主键 + 变更列）一律拒绝并改走精确补拉。
 
 ## 技术栈
 
-- **React 19 + TypeScript**：界面与类型
+- **React 19 + TypeScript 7**：界面与类型
 - **Vite 8**：构建与开发服务器
 - **Tailwind CSS 4**：样式（含深浅色主题）
 - **Dexie 4**：IndexedDB 数据层
 - **Supabase**：可选账号与任务云同步（RLS + Realtime + 原子条件写）
 - **vite-plugin-pwa / Workbox**：manifest、Service Worker 与离线缓存
 - **dayjs**：日期处理
+- **oxlint + Prettier**：静态检查与代码格式（CI 全跑，见「代码检查与格式化」）
 
 ## 迭代日志
 
@@ -183,3 +202,43 @@ npm run typecheck
 - **数据自愈**：Dexie v3 迁移修复旧非 UUID ID；远端删除同步清理今日选择；悬空选择不再占三个名额。
 - **交互修复**：实际耗时可清空；子任务写入串行且失败回滚；弹窗 Esc 只关最上层；跨午夜日历/统计刷新；未保存表单不会被 PWA 强制刷新。
 - **性能与结构**：设置/登录/统计按需加载，第三方依赖拆 vendor 块，任务筛选缓存并对高频列表做渲染隔离；统一弹窗与子任务清洗逻辑。
+
+### 2026-11-15 · 全量代码审查：正确性、可维护性与白屏兜底
+
+- **同步串号（P1）**：`mergeLocalWorkspaceIntoAccount` 复制工作区前未清空待推送队列。切换账号后、确认复制前产生的编辑仍带着旧 `id`，复制会重建主键，这些旧条目一旦被 flush 推上去就是一批重复任务。现在复制前先 `clearPendingPushes()`。
+- **推送失败无重试（P1）**：此前推送失败只写 `lastError`，队列原地不动，只能等用户再改一次或 5 分钟后的全量同步兜底。新增指数退避重试（5s→10s→20s…上限 5 分钟），成功或切账号时归零；账号冲突/会话取消不重试，避免无意义抖动。
+- **白屏无兜底（P1）**：新增 `ErrorBoundary` 包裹 `App`。任何渲染异常（脏数据、chunk 加载失败）不再卸载整棵树，而是给出「数据仍在 IndexedDB」的说明，支持崩溃后**先导出备份再刷新**（备份模块用动态 import，避免自身加载失败连带拖垮兜底页）。
+- **统计口径不一致（P2）**：三张统计图原先直接用 `status === 'done'`，绕过了全应用统一的 `isTaskDone`（兼容旧备份的 `isCompleted`），导致同一份数据列表显示已完成、统计却不算。抽出 `completedAtMs()` 统一入口。
+- **饼图脏数据（P2）**：`typeDistribution` 遇到非法 `type` 会写出 `undefined` 计数，ECharts 拿到 NaN 直接不渲染整张图。改为未知类型归入「其他」。
+- **耗时上限三处漂移（P2）**：`100` 这个上限分散在 `useTasks`（新增/更新）、`TaskFormSheet`（校验 + input 属性）、`backup`（导入）四处，且更新路径只挡负数不挡上限。抽出 `utils/taskLimits.ts` 作为唯一真源，四处共用。
+- **历史任务改不动（P2）**：表单把预计耗时下限写成 `> 0`，而导入的历史任务普遍是 `0`（未估算），这类任务只改标题也会被耗时校验拦住、永远存不了。下限改为 0，与数据层/导入层对齐。
+- **逾期判断自相矛盾（P2）**：`AllTasksView` 的逾期徽标不传 `now`（用真实当前时间），进度条用 `useNow()` 的 60 秒快照，跨过 DDL 的那一分钟会出现「还剩 1 小时」和「已逾期」同时出现。改为共用同一个 `now`。
+- **下载逻辑重复（P3）**：备份 JSON 与日历 ICS 各写了一份 `a[download] + ObjectURL + 延迟回收`。抽出 `utils/download.ts`，新增导出格式直接复用。
+- **弹窗关闭时机（P3）**：设置面板导入/导出/Gist 操作进行中仍可点遮罩或按 Esc 关闭，操作还在跑、面板已卸载，用户看不到结果。忙碌期间禁用两种关闭方式。
+- **无障碍（P3）**：DDL 进度条补 `aria-label`，读屏不再只播报一个无名字的百分比。
+- **回归测试**：新增 `src/utils/__tests__/stats.test.ts`（近 7 天落位、`isCompleted` 兼容、未知类型兜底、本周耗时聚合），测试总数 40 → 46。
+
+### 2026-11-15 · 数据完整性与并发冲突（第二轮）
+
+按「不做今日选择同步 / 云端 SQL + 客户端兜底 / 只清云端墓碑 / 按副作用拆分 / 补工程化 / 乐观并发」六项结论，先落地三项防丢数据的：
+
+- **Realtime 半行数据（P1）**：默认 `REPLICA IDENTITY` 下 UPDATE 事件只带主键与变更列，`rowToTask(payload.new)` 会把任务写成空标题、缺子任务的残缺行。云端执行 `alter table public.tasks replica identity full;`（已写入 `schema.sql`），客户端再由 `src/lib/taskRow.ts` 的 `isCompleteTaskRow` 判定完整性——不完整就按 id 精确补拉一次（`pullRemoteRow`），绝不落后半行。两道防线互不依赖：忘跑 SQL 也不会写坏本地数据。
+- **编辑期间被其他设备修改（P1）**：表单打开时记下 `task.updatedAt`，`updateTask` 在同一 Dexie 事务里「读 → 比 → 写」，版本不一致抛 `TaskConflictError`；表单不再静默覆盖，而是弹「覆盖保存 / 放弃修改」，放弃后界面即同步为最新版本。版本比较走 `timestampMs`（毫秒）而不是字符串——本地 `Z` 与云端 `+00:00` 直接比字符串会把同一次修改误判成冲突。
+- **墓碑永久堆积（P2）**：只在云端清。`schema.sql` 末尾用 `pg_cron` 每天 04:00 物理删除 `deleted and updated_at < now() - interval '90 days'` 的行；未启用 `pg_cron` 时 `RAISE NOTICE` 跳过，不影响其它语句。**本地墓碑一行不动**——本地删了云端还在，下次全量同步原样拉回来；未登录时物理删也一样，登录后云端那条会复活。
+- **今日选择不同步定案（决策）**：确认不做跨设备同步，同时删除 `useDailySelection` 里仅服务于同步/调试的三个危险接口：`selection` 原文、按日期直读 `getSelection`、`clearSelection`（清空某天）。现在对外只有「id 列表 + 加/减/整体覆盖」三个写操作，调用方无法绕过 3 个名额与完成态校验。
+- **测试**：新增 `src/lib/__tests__/taskRow.test.ts`（整行通过、半行拒绝、缺 `sub_tasks` 拒绝、类型错误拒绝），测试总数 46 → 51。
+
+### 2026-11-15 · 按副作用拆分 + 工程化兜底（第三轮）
+
+- **App 从 550 行降到 391 行（含 JSX）**：按「副作用」而不是「JSX」切分，避免拆完还要靠 props 打洞。
+  - `hooks/useTaskActions.ts`（218 行）：任务增删改、勾选、子任务、今日三件事的增删与一键生成，以及「已删除选择不占名额」的过滤。
+  - `hooks/useAccountSwitch.ts`（104 行）：账号绑定冲突、复制并切换、退出、手动同步。
+  - App 只剩布局、当前 tab、弹层编排与专注计时。
+- **确认框改成注入而不是依赖**：`useTaskActions` 需要弹「是否覆盖今日选择」，这里注入 `requestConfirm(message, onConfirm)`，hook 不再持有 `setConfirmState`，也就不会把 UI 状态反向依赖进业务层。
+- **换账号复制的一个真实隐患**：原逻辑「复制成功 → 同步成功才关提示」，若同步失败弹窗仍在，用户再点一次「复制并切换」就会复制出**第二份**任务（`bindSyncOwner` 早已执行）。现在复制成功即关提示，同步失败只提示「稍后自动重试」。
+- **归属冲突不再用 effect + setState**：改在渲染期从 `getBoundSyncUserId()` 派生。绑定关系只会在登录 / 复制 / 退出时变化，派生天然不会出现「effect 还没跑完 UI 已闪一下」的中间态。
+- **专注计时解构取用**：`useFocusTimer()` 每次渲染返回新对象，整体进依赖数组会让「任务失效即停止」的 effect 在每 500ms 计时里重跑；解构出字段与方法后依赖精确到单个函数。
+- **静态检查落地（oxlint）**：`typescript-eslint` 8.x 启动即抛 `does not support TS 7.0`，装上会让 `npm install` 因 peer 冲突失败——所以改用自带解析器的 oxlint，规则锁定 `no-floating-promises`、`rules-of-hooks`、`exhaustive-deps`、`only-export-components`、`no-unused-vars`。当前 **0 warning / 0 error**。
+- **Prettier 全量格式化**：`printWidth 100` + 单引号 + `prettier-plugin-tailwindcss`（class 顺序统一）。`.prettierignore` 保护 README、锁文件与构建产物。
+- **CI**：`deploy.yml` 在 `npm ci` 之后依次跑 lint → format check → test → build，四个任一失败即不部署。
+- **验证**：`tsc --noEmit` 通过；`oxlint` 0/0；`prettier --check` 全通过；vitest 8 文件 51 项通过；`npm run build` 通过；`npm ci --dry-run` 通过（lockfile 与 package.json 一致）。

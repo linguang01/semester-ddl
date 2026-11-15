@@ -156,7 +156,9 @@ export const TodayView = memo(function TodayView({
                       <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-slate-400 dark:text-slate-500">
                         <span
                           className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                            isTaskDone(task) ? 'bg-slate-300 dark:bg-slate-600' : PRIORITY_DOT[task.priority]
+                            isTaskDone(task)
+                              ? 'bg-slate-300 dark:bg-slate-600'
+                              : PRIORITY_DOT[task.priority]
                           }`}
                         />
                         <span>{formatDeadline(task.deadline)}</span>

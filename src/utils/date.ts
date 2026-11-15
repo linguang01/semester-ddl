@@ -11,11 +11,7 @@ export const DEFAULT_DEADLINE_MINUTE = 30;
 
 /** 把某一天统一对齐到默认截止时刻 16:30:00.000 */
 export function atDefaultDeadline(base: dayjs.Dayjs = dayjs()): dayjs.Dayjs {
-  return base
-    .hour(DEFAULT_DEADLINE_HOUR)
-    .minute(DEFAULT_DEADLINE_MINUTE)
-    .second(0)
-    .millisecond(0);
+  return base.hour(DEFAULT_DEADLINE_HOUR).minute(DEFAULT_DEADLINE_MINUTE).second(0).millisecond(0);
 }
 
 /** 今天 + days 天的 16:30（快捷按钮与自定义天数共用同一套计算） */

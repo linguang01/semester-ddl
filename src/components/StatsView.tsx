@@ -126,7 +126,11 @@ export function StatsView({ tasks, isDark, today }: StatsViewProps) {
   const barOption: EChartsCoreOption = useMemo(
     () => ({
       grid: { left: 8, right: 16, top: 20, bottom: 32, containLabel: true },
-      tooltip: { trigger: 'axis', ...tooltipBase, valueFormatter: (value: unknown) => `${value} 小时` },
+      tooltip: {
+        trigger: 'axis',
+        ...tooltipBase,
+        valueFormatter: (value: unknown) => `${value} 小时`,
+      },
       legend: {
         bottom: 0,
         icon: 'circle',
@@ -175,7 +179,11 @@ export function StatsView({ tasks, isDark, today }: StatsViewProps) {
           <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">近 7 天完成</h2>
           <span className="text-[11px] text-slate-400 dark:text-slate-500">共 {weekTotal} 件</span>
         </div>
-        <EChart option={lineOption} className="mt-1 h-48 w-full" ariaLabel="近 7 天每天完成任务数折线图" />
+        <EChart
+          option={lineOption}
+          className="mt-1 h-48 w-full"
+          ariaLabel="近 7 天每天完成任务数折线图"
+        />
       </section>
 
       <section className={CARD_CLASS}>
@@ -191,7 +199,11 @@ export function StatsView({ tasks, isDark, today }: StatsViewProps) {
             {weekHours.totalActual}h
           </span>
         </div>
-        <EChart option={barOption} className="mt-1 h-52 w-full" ariaLabel="本周预计耗时与实际耗时对比柱状图" />
+        <EChart
+          option={barOption}
+          className="mt-1 h-52 w-full"
+          ariaLabel="本周预计耗时与实际耗时对比柱状图"
+        />
         <p className="mt-2 text-[11px] leading-relaxed text-slate-400 dark:text-slate-500">
           按完成时间统计本周已完成事项；实际耗时需在编辑事项时手动填写，未填按 0 计。
         </p>

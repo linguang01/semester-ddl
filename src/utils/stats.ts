@@ -1,9 +1,21 @@
 import dayjs, { type Dayjs } from 'dayjs';
 import type { Task, TaskType } from '../types';
+import { TASK_TYPES, isTaskDone } from './taskDisplay';
 
 /** 保留 1 位小数，避免 0.1 + 0.2 之类的浮点噪声 */
 function round1(value: number): number {
   return Math.round(value * 10) / 10;
+}
+
+/**
+ * 完成任务的时间戳（毫秒）；未完成、缺 completedAt、时间非法时返回 null。
+ * 三张统计图共用这一道入口，避免各写一遍「status === 'done' && completedAt」。
+ */
+function completedAtMs(task: Task): number | null {
+  // 统一口径：旧备份里可能只有 isCompleted 字段，直接用 status 判断会漏统计
+  if (!isTaskDone(task) || !task.completedAt) return null;
+  const parsed = dayjs(task.completedAt);
+  return parsed.isValid() ? parsed.valueOf() : null;
 }
 
 export interface DayCount {
@@ -25,10 +37,9 @@ export function completedLast7Days(tasks: Task[], now: Dayjs = dayjs()): DayCoun
   }
 
   for (const task of tasks) {
-    if (task.status !== 'done' || !task.completedAt) continue;
-    const completed = dayjs(task.completedAt);
-    if (!completed.isValid()) continue;
-    const index = completed.startOf('day').diff(start, 'day');
+    const ms = completedAtMs(task);
+    if (ms === null) continue;
+    const index = dayjs(ms).startOf('day').diff(start, 'day');
     if (index >= 0 && index < 7) {
       days[index].count += 1;
     }
@@ -46,7 +57,10 @@ export interface TypeCount {
 export function typeDistribution(tasks: Task[]): TypeCount[] {
   const counts: Record<TaskType, number> = { homework: 0, exam: 0, club: 0, other: 0 };
   for (const task of tasks) {
-    counts[task.type] += 1;
+    // 类型可来自云端旧行或手改的备份，可能不是合法枚举值；
+    // 直接 counts[task.type] += 1 会凭空造出一个 undefined 计数，饼图拿到 NaN 后直接不渲染。
+    const type = (TASK_TYPES as readonly string[]).includes(task.type) ? task.type : 'other';
+    counts[type] += 1;
   }
   return (Object.keys(counts) as TaskType[]).map((type) => ({ type, count: counts[type] }));
 }
@@ -77,10 +91,9 @@ export function hoursThisWeek(tasks: Task[], now: Dayjs = dayjs()): WeekHours {
   let doneCount = 0;
 
   for (const task of tasks) {
-    if (task.status !== 'done' || !task.completedAt) continue;
-    const completed = dayjs(task.completedAt);
-    if (!completed.isValid()) continue;
-    const index = completed.startOf('day').diff(weekStart, 'day');
+    const ms = completedAtMs(task);
+    if (ms === null) continue;
+    const index = dayjs(ms).startOf('day').diff(weekStart, 'day');
     if (index < 0 || index > 6) continue;
     estimated[index] += task.estimatedHours;
     actual[index] += task.actualHours ?? 0;

@@ -22,6 +22,8 @@ export function useDbQuery<T>(
   const [error, setError] = useState<Error | null>(null);
   const initialValueRef = useRef(initialValue);
 
+  // 依赖数组由调用方的 deps 决定（querier 每次渲染都是新函数，不能直接进依赖）。
+  // oxlint-disable-next-line react/exhaustive-deps -- 依赖由调用方传入，规则无法静态推导
   useEffect(() => {
     // 切换查询键（例如跨天后的日期）时先清空旧值，避免把昨日选择当今日使用。
     setValue(initialValueRef.current);

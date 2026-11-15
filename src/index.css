@@ -102,9 +102,8 @@ iframe[src*='edgeone'] {
      正文与数字统一走系统无衬线栈：中文优先苹方/微软雅黑，英文走 SF/Segoe，
      不加载任何 webfont，首屏零抖动。 */
   --font-sans:
-    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC',
-    'Helvetica Neue', 'Microsoft YaHei', 'Segoe UI', Roboto, 'Noto Sans SC',
-    sans-serif;
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Helvetica Neue',
+    'Microsoft YaHei', 'Segoe UI', Roboto, 'Noto Sans SC', sans-serif;
 
   /* ---------- 字号分级（大 / 中 / 小） ----------
      display  → 页面主数字、天数倒计时
@@ -198,12 +197,9 @@ iframe[src*='edgeone'] {
   --color-danger-100: #3c2523;
 
   /* 暗色下阴影透明度要更低，否则脏 */
-  --shadow-soft:
-    0 0 0 1px rgb(255 255 255 / 0.04), 0 10px 28px -14px rgb(0 0 0 / 0.6);
-  --shadow-lift:
-    0 0 0 1px rgb(255 255 255 / 0.05), 0 18px 40px -18px rgb(0 0 0 / 0.7);
-  --shadow-float:
-    0 0 0 1px rgb(255 255 255 / 0.06), 0 32px 64px -24px rgb(0 0 0 / 0.8);
+  --shadow-soft: 0 0 0 1px rgb(255 255 255 / 0.04), 0 10px 28px -14px rgb(0 0 0 / 0.6);
+  --shadow-lift: 0 0 0 1px rgb(255 255 255 / 0.05), 0 18px 40px -18px rgb(0 0 0 / 0.7);
+  --shadow-float: 0 0 0 1px rgb(255 255 255 / 0.06), 0 32px 64px -24px rgb(0 0 0 / 0.8);
 }
 
 @layer base {

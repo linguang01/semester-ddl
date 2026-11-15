@@ -22,7 +22,9 @@ export const supabase = createClient<Database>(
 /** 统一的「未配置」错误，UI 直接展示 message */
 export class SupabaseConfigError extends Error {
   constructor() {
-    super('尚未配置 Supabase：请在 .env.local 填入 VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY 后重启应用');
+    super(
+      '尚未配置 Supabase：请在 .env.local 填入 VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY 后重启应用',
+    );
     this.name = 'SupabaseConfigError';
   }
 }

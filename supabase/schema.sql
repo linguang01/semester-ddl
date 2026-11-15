@@ -126,3 +126,44 @@ begin
     alter publication supabase_realtime add table public.tasks;
   end if;
 end $$;
+
+-- ============================================================
+-- Realtime 事件完整性（必须执行）
+-- ============================================================
+-- 默认 REPLICA IDENTITY（default）下，UPDATE 事件只带主键 + 实际变更的列。
+-- 客户端把这种「半行」直接写进本地 IndexedDB，就会得到 title 为空、进度算不出来的
+-- 残缺任务，并进一步触发无意义的互相覆盖。
+-- 设为 full 后事件携带整行，客户端（src/lib/sync.ts 的 isCompleteTaskRow）再按整行覆盖才安全。
+-- 幂等：重复执行无副作用；代价只是 WAL 略大，tasks 是小表可以忽略。
+alter table public.tasks replica identity full;
+
+-- ============================================================
+-- 维护任务：墓碑清理（只删云端，客户端一行都不改）
+-- ============================================================
+-- 软删除的墓碑必须靠云端清理，不能清本地：
+--   · 本地删了但云端还在 → 下次全量同步原样拉回来（复活）；
+--   · 未登录时物理删除 → 之后登录同一账号，云端旧任务同样会复活。
+-- 因此唯一正确的清理点是服务端，且保留 90 天：
+-- 超过 90 天没联网的设备本就该做一次全量校准；真在 90 天后才打开，
+-- 那条被清掉墓碑的任务会重新出现 —— 这是可接受且可解释的代价。
+do $$
+begin
+  if not exists (select 1 from pg_extension where extname = 'pg_cron') then
+    raise notice 'pg_cron 未启用，已跳过墓碑清理任务。请在 Dashboard → Database → Extensions 启用 pg_cron 后重跑本段 SQL。';
+    return;
+  end if;
+
+  if exists (select 1 from cron.job where jobname = 'purge-task-tombstones') then
+    perform cron.unschedule('purge-task-tombstones');
+  end if;
+
+  perform cron.schedule(
+    'purge-task-tombstones',
+    '0 4 * * *',
+    $cron$ delete from public.tasks where deleted and updated_at < now() - interval '90 days' $cron$
+  );
+end $$;
+
+-- 不想装 pg_cron 也可以手动跑（建议每季度一次）：
+-- delete from public.tasks where deleted and updated_at < now() - interval '90 days';
+

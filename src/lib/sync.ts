@@ -6,6 +6,7 @@ import { normalizeSubTasks } from '../utils/subTasks';
 import type { TasksRow } from './database.types';
 import { assertSupabaseConfigured, supabase } from './supabase';
 import { hasSameTaskContent, planSyncMerge } from './syncMerge';
+import { isCompleteTaskRow } from './taskRow';
 
 /**
  * 云端同步引擎：本地优先 + 按 updatedAt 最后写入胜（LWW）。
@@ -107,6 +108,10 @@ export async function mergeLocalWorkspaceIntoAccount(userId: string): Promise<nu
   const now = new Date().toISOString();
   const changed: Task[] = [];
 
+  // 队列里可能还留着「登录新账号后、用户确认复制前」产生的旧 ID 任务：
+  // 复制会重建全部主键，这些旧条目如果再被推上去就是一批重复任务，必须先清空。
+  clearPendingPushes();
+
   await db.transaction('rw', db.tasks, db.dailySelections, async () => {
     const tasks = (await db.tasks.toArray()).filter((task) => !task.deleted);
     const idMap = new Map<string, string>();
@@ -177,6 +182,9 @@ export function getSyncStatus(): SyncStatus {
 
 const AUTO_SYNC_MIN_INTERVAL = 30_000;
 const PUSH_DEBOUNCE_MS = 2_000;
+/** 推送失败后的指数退避：5s → 10s → 20s …，上限 5 分钟 */
+const PUSH_RETRY_BASE_MS = 5_000;
+const PUSH_RETRY_MAX_MS = 5 * 60_000;
 
 let currentUserId: string | null = null;
 let syncEpoch = 0;
@@ -187,6 +195,8 @@ let stopRealtime: (() => void) | null = null;
 
 const pendingPush = new Map<string, Task>();
 let pushTimer: number | null = null;
+let pushRetryTimer: number | null = null;
+let pushRetryDelay = PUSH_RETRY_BASE_MS;
 let activeFlush: Promise<void> | null = null;
 let flushAgain = false;
 
@@ -215,6 +225,26 @@ function ensureRealtimeSubscription(userId: string): void {
   stopRealtime = subscribeTaskRealtime(userId);
 }
 
+/**
+ * 清空待推送队列及其所有定时器。
+ * 切账号、复制工作区到新账号时必须调用：队列里的任务仍带着旧账号/旧 ID，
+ * 一旦漏推就会把上一账号的数据写进新账号（重复任务或串号）。
+ */
+function clearPendingPushes(): void {
+  pendingPush.clear();
+  flushAgain = false;
+  pushRetryDelay = PUSH_RETRY_BASE_MS;
+
+  if (pushTimer !== null) {
+    window.clearTimeout(pushTimer);
+    pushTimer = null;
+  }
+  if (pushRetryTimer !== null) {
+    window.clearTimeout(pushRetryTimer);
+    pushRetryTimer = null;
+  }
+}
+
 /** 切换账号或登出时隔离队列，禁止把上一账号的待推送任务写入新账号。 */
 export function setCurrentSyncUser(userId: string | null): void {
   if (currentUserId === userId) return;
@@ -222,14 +252,8 @@ export function setCurrentSyncUser(userId: string | null): void {
   currentUserId = userId;
   syncEpoch += 1;
   lastAutoSyncAt = 0;
-  pendingPush.clear();
-  flushAgain = false;
+  clearPendingPushes();
   stopRealtimeSubscription();
-
-  if (pushTimer !== null) {
-    window.clearTimeout(pushTimer);
-    pushTimer = null;
-  }
 
   syncStatus = { syncing: false, lastSyncAt: null, lastError: null };
   for (const listener of statusListeners) listener();
@@ -242,6 +266,25 @@ function schedulePushFlush(): void {
     pushTimer = null;
     void flushPushes();
   }, PUSH_DEBOUNCE_MS);
+}
+
+/**
+ * 推送失败后的重试调度。
+ *
+ * 之前失败只是把错误写进 syncStatus，队列原地不动 —— 只有「用户再改一次任务」
+ * 或「5 分钟一次的自动全量同步」才会重试，弱网下可能丢掉一整段时间的修改。
+ * 这里补一层指数退避，成功或切账号时把退避重置回 5 秒。
+ */
+function schedulePushRetry(): void {
+  if (pushRetryTimer !== null || currentUserId === null || pendingPush.size === 0) return;
+
+  const delay = pushRetryDelay;
+  pushRetryDelay = Math.min(pushRetryDelay * 2, PUSH_RETRY_MAX_MS);
+
+  pushRetryTimer = window.setTimeout(() => {
+    pushRetryTimer = null;
+    void flushPushes();
+  }, delay);
 }
 
 /** 本地任务变化后调用；未登录时静默跳过，登录后的全量同步会补齐。 */
@@ -307,6 +350,23 @@ async function fetchRemoteRows(userId: string, taskIds?: string[]): Promise<Task
 }
 
 /**
+ * 按 id 精确补拉单行。
+ * Realtime 事件若只带部分列（REPLICA IDENTITY 非 full），用它换回完整版本，
+ * 而不是把半行数据写进本地。
+ */
+async function pullRemoteRow(userId: string, taskId: string): Promise<TasksRow | null> {
+  const { data, error } = await supabase
+    .from('tasks')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('id', taskId)
+    .maybeSingle();
+
+  if (error) throw new Error(`补拉单条任务失败：${error.message}`);
+  return (data as TasksRow | null) ?? null;
+}
+
+/**
  * 通过数据库函数执行条件写：只有 incoming.updated_at 更新时才覆盖。
  * 客户端先读后写会输给竞态，原子条件写才能保证旧请求不会回滚新数据。
  */
@@ -328,7 +388,11 @@ async function pushRemoteRows(userId: string, tasks: Task[]): Promise<void> {
  * 合并一批远端行，并仅推送本地明确更新的任务。
  * 本地读取与远端落盘在同一 Dexie 事务中完成，删除墓碑会同时清理每日选择引用。
  */
-async function mergeRemoteAndPush(userId: string, remoteRows: TasksRow[], taskIds?: string[]): Promise<void> {
+async function mergeRemoteAndPush(
+  userId: string,
+  remoteRows: TasksRow[],
+  taskIds?: string[],
+): Promise<void> {
   const localPushes = await db.transaction('rw', db.tasks, db.dailySelections, async () => {
     const records = taskIds ? await db.tasks.bulkGet(taskIds) : await db.tasks.toArray();
     const localTasks = records.filter((task): task is Task => task !== undefined);
@@ -374,6 +438,8 @@ async function performFlush(userId: string, taskIds: string[]): Promise<void> {
 
   if (currentUserId === userId) {
     setSyncStatus({ lastError: null, lastSyncAt: new Date().toISOString() });
+    // 这一轮推送成功，退避时间归零，下次失败重新从 5 秒起算
+    pushRetryDelay = PUSH_RETRY_BASE_MS;
   }
 }
 
@@ -396,7 +462,10 @@ async function flushPushes(): Promise<void> {
     if (currentUserId === userId) {
       setSyncStatus({ lastError: cause instanceof Error ? cause.message : String(cause) });
     }
-    // 不清 pendingPush；下次全量同步或本地变更会重试。
+    // 不清 pendingPush；账号冲突/会话取消重试也没意义，其余（网络、超时）走退避重试。
+    if (!(cause instanceof SyncAccountConflictError) && !(cause instanceof SyncCancelledError)) {
+      schedulePushRetry();
+    }
   } finally {
     if (activeFlush === promise) activeFlush = null;
     if (flushAgain && currentUserId !== null && pendingPush.size > 0) {
@@ -500,10 +569,20 @@ export function subscribeTaskRealtime(userId: string): () => void {
       'postgres_changes',
       { event: '*', schema: 'public', table: 'tasks', filter: `user_id=eq.${userId}` },
       (payload) => {
-        const row = payload.new as TasksRow | null;
-        if (currentUserId !== userId || !row?.id || row.user_id !== userId) return;
+        // 类型声明是 TasksRow，但运行时可能只带部分列，按 Partial 处理才诚实
+        const incoming = payload.new as Partial<TasksRow> | null;
+        if (currentUserId !== userId || !incoming?.id || incoming.user_id !== userId) return;
 
-        void applyRemoteRow(row).catch((cause: unknown) => {
+        const taskId = incoming.id;
+
+        void (async () => {
+          // 事件可能是「半行」（REPLICA IDENTITY 非 full）：先判完整性，
+          // 不完整就按 id 精确补拉一次，绝不让残缺行落到 IndexedDB。
+          const row = isCompleteTaskRow(incoming) ? incoming : await pullRemoteRow(userId, taskId);
+
+          if (!row || currentUserId !== userId) return;
+          await applyRemoteRow(row);
+        })().catch((cause: unknown) => {
           if (currentUserId !== userId) return;
           setSyncStatus({
             lastError: `实时同步失败：${cause instanceof Error ? cause.message : String(cause)}`,

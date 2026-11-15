@@ -44,9 +44,7 @@ function makeRow(id: string, updatedAt: string, deleted = false): TasksRow {
 
 describe('timestampMs', () => {
   it('按实际时间比较不同时区与精度，而不是比较 ISO 字符串', () => {
-    expect(timestampMs('2026-11-01T00:00:00.000Z')).toBe(
-      timestampMs('2026-10-31T16:00:00-08:00'),
-    );
+    expect(timestampMs('2026-11-01T00:00:00.000Z')).toBe(timestampMs('2026-10-31T16:00:00-08:00'));
     expect(timestampMs('2026-11-01T00:00:00.123456+00:00')).toBeGreaterThan(
       timestampMs('2026-11-01T00:00:00.122Z'),
     );
@@ -66,10 +64,7 @@ describe('planSyncMerge', () => {
 
   it('远端较新时只拉取，包括需要跨设备传播的删除墓碑', () => {
     const remote = makeRow('deleted', '2026-11-03T00:00:00+00:00', true);
-    const plan = planSyncMerge(
-      [makeTask('deleted', '2026-11-02T00:00:00.000Z')],
-      [remote],
-    );
+    const plan = planSyncMerge([makeTask('deleted', '2026-11-02T00:00:00.000Z')], [remote]);
 
     expect(plan.remoteWrites).toEqual([remote]);
     expect(plan.localPushes).toEqual([]);

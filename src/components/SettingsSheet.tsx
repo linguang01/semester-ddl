@@ -87,14 +87,20 @@ export function SettingsSheet({
   const [pendingBackup, setPendingBackup] = useState<ParsedBackup | null>(null);
 
   // 通知权限状态（打开面板时读取当前值，请求后刷新）
-  const [notifyState, setNotifyState] = useState<NotificationPermissionState>(() => getNotificationState());
+  const [notifyState, setNotifyState] = useState<NotificationPermissionState>(() =>
+    getNotificationState(),
+  );
   // Gist 云备份：Token / Gist ID 预填自 localStorage
   const [gistToken, setGistToken] = useState(() => getStoredToken());
   const [gistId, setGistId] = useState(() => getStoredGistId());
   const [gistBusy, setGistBusy] = useState<'upload' | 'download' | null>(null);
   const [gistInfo, setGistInfo] = useState<GistUploadResult | null>(null);
   const [pendingGistBackup, setPendingGistBackup] = useState<ParsedBackup | null>(null);
-  const dialogRef = useDialog(onClose);
+
+  // 数据类操作进行中：禁止点遮罩 / 按 Esc 关闭。
+  // 否则导入还在写库、面板已被卸载，用户既看不到导入结果，也不知道数据是否落下。
+  const busy = exporting || importing || calendarExporting || gistBusy !== null;
+  const dialogRef = useDialog(busy ? undefined : onClose);
 
   const handleExport = async () => {
     if (exporting || importing) return;
@@ -126,10 +132,7 @@ export function SettingsSheet({
       // 解析成功后先弹确认框，确认后再真正写入
       setPendingBackup(parsed);
     } catch (error) {
-      notify(
-        error instanceof BackupError ? error.message : '导入失败，现有数据未受影响',
-        'error',
-      );
+      notify(error instanceof BackupError ? error.message : '导入失败，现有数据未受影响', 'error');
     } finally {
       setImporting(false);
     }
@@ -151,10 +154,7 @@ export function SettingsSheet({
       const hasSkipped = result.skippedTasks + result.skippedSelections > 0;
       notify(describeImportReport(result), hasSkipped ? 'info' : 'success');
     } catch (error) {
-      notify(
-        error instanceof BackupError ? error.message : '导入失败，现有数据未受影响',
-        'error',
-      );
+      notify(error instanceof BackupError ? error.message : '导入失败，现有数据未受影响', 'error');
     } finally {
       setImporting(false);
     }
@@ -259,7 +259,9 @@ export function SettingsSheet({
     <div className="fixed inset-0 z-50 flex items-end justify-center">
       <div
         className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm dark:bg-black/60"
-        onClick={onClose}
+        onClick={() => {
+          if (!busy) onClose();
+        }}
         role="presentation"
       />
 
@@ -275,7 +277,10 @@ export function SettingsSheet({
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-slate-200 dark:bg-slate-700" />
 
         <div className="flex items-center justify-between">
-          <h2 id="settings-title" className="text-base font-semibold text-slate-900 dark:text-slate-100">
+          <h2
+            id="settings-title"
+            className="text-base font-semibold text-slate-900 dark:text-slate-100"
+          >
             设置
           </h2>
           <button
@@ -386,7 +391,8 @@ export function SettingsSheet({
         <section className="mt-5">
           <h3 className="text-xs font-medium text-slate-500 dark:text-slate-400">通知提醒</h3>
           <p className="mt-1 text-[11px] leading-relaxed text-slate-400 dark:text-slate-500">
-            开启后，任务距离 DDL 不足 24 小时会弹系统通知。仅应用/页面打开或挂在后台时生效，彻底关闭后无法推送。
+            开启后，任务距离 DDL 不足 24
+            小时会弹系统通知。仅应用/页面打开或挂在后台时生效，彻底关闭后无法推送。
           </p>
           <button
             type="button"
@@ -406,7 +412,8 @@ export function SettingsSheet({
         <section className="mt-5">
           <h3 className="text-xs font-medium text-slate-500 dark:text-slate-400">数据备份</h3>
           <p className="mt-1 text-[11px] leading-relaxed text-slate-400 dark:text-slate-500">
-            导出当前可见任务和今日选择。导入采用合并方式，不会删除备份中不存在的任务；同 ID 任务以备份版本为准，写入前会自动下载当前数据备份。
+            导出当前可见任务和今日选择。导入采用合并方式，不会删除备份中不存在的任务；同 ID
+            任务以备份版本为准，写入前会自动下载当前数据备份。
           </p>
 
           <div className="mt-2 grid grid-cols-2 gap-2">
@@ -468,13 +475,18 @@ export function SettingsSheet({
         </section>
 
         <section className="mt-5">
-          <h3 className="text-xs font-medium text-slate-500 dark:text-slate-400">云备份（GitHub Gist）</h3>
+          <h3 className="text-xs font-medium text-slate-500 dark:text-slate-400">
+            云备份（GitHub Gist）
+          </h3>
           <p className="mt-1 text-[11px] leading-relaxed text-slate-400 dark:text-slate-500">
-            用 GitHub Personal Access Token 把可见任务备份到私有 Gist；换设备时按 Gist ID 拉回并覆盖本地。备份中不存在的本地任务会被标记删除，并同步到已登录账号。
+            用 GitHub Personal Access Token 把可见任务备份到私有 Gist；换设备时按 Gist ID
+            拉回并覆盖本地。备份中不存在的本地任务会被标记删除，并同步到已登录账号。
           </p>
 
           <label className="mt-2 block">
-            <span className="text-[11px] text-slate-500 dark:text-slate-400">Personal Access Token</span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400">
+              Personal Access Token
+            </span>
             <input
               type="password"
               value={gistToken}
@@ -518,7 +530,7 @@ export function SettingsSheet({
           </div>
 
           {gistInfo && (
-            <p className="mt-1.5 break-all text-[11px] leading-relaxed text-slate-400 dark:text-slate-500">
+            <p className="mt-1.5 text-[11px] leading-relaxed break-all text-slate-400 dark:text-slate-500">
               已备份 Gist ID：{gistInfo.gistId}（
               <a
                 href={gistInfo.htmlUrl}
@@ -542,12 +554,13 @@ export function SettingsSheet({
           <p className="mt-1.5 text-[11px] leading-relaxed text-slate-400 dark:text-slate-500">
             应用会在打开、切回前台、网络恢复时自动检查更新，页面开着时每小时也会检查一次；发现新版本后会在没有未保存内容时自动刷新。
           </p>
-          <p className="mt-1.5 break-all text-[11px] leading-relaxed text-slate-400 dark:text-slate-500">
+          <p className="mt-1.5 text-[11px] leading-relaxed break-all text-slate-400 dark:text-slate-500">
             当前访问地址：{SITE_ORIGIN}
           </p>
           {IS_TEMP_ORIGIN && (
             <p className="mt-1.5 rounded-lg bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
-              当前是临时预览地址（24 小时后失效）或国内无法稳定直连的地址，装在主屏幕的应用会随之失效。请改用部署平台的固定生产域名打开，并重新「添加到主屏幕」一次。
+              当前是临时预览地址（24
+              小时后失效）或国内无法稳定直连的地址，装在主屏幕的应用会随之失效。请改用部署平台的固定生产域名打开，并重新「添加到主屏幕」一次。
             </p>
           )}
 
@@ -564,7 +577,8 @@ export function SettingsSheet({
         <section className="mt-5 rounded-xl bg-slate-50 px-3 py-3 dark:bg-slate-800/60">
           <h3 className="text-xs font-medium text-slate-700 dark:text-slate-300">关于离线使用</h3>
           <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-            在 HTTPS 或 localhost 下，首次打开后应用会自动缓存，之后可以离线打开；发布新版本后，应用会在打开或切回前台时自动更新。
+            在 HTTPS 或 localhost
+            下，首次打开后应用会自动缓存，之后可以离线打开；发布新版本后，应用会在打开或切回前台时自动更新。
           </p>
           <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
             PWA 安装和 Service Worker 需要 HTTPS 或 localhost。通过局域网 IP（192.168.x.x）的 HTTP

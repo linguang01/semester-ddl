@@ -38,23 +38,15 @@ describe('parseDateTime：非法与边界日期', () => {
 
 describe('parseDateTime：时段换算', () => {
   it('深夜 3 点是 03:00，不是 15:00', () => {
-    expect(result('明天深夜3点写代码', new Date(2026, 10, 3, 10, 0)).key).toBe(
-      '2026-11-04 03:00',
-    );
+    expect(result('明天深夜3点写代码', new Date(2026, 10, 3, 10, 0)).key).toBe('2026-11-04 03:00');
   });
 
   it('下午 12 点保持 12:00，晚上 12 点归零', () => {
-    expect(result('下午12点开会', new Date(2026, 10, 3, 10, 0)).key).toBe(
-      '2026-11-03 12:00',
-    );
-    expect(result('明天晚上12点截止', new Date(2026, 10, 3, 10, 0)).key).toBe(
-      '2026-11-04 00:00',
-    );
+    expect(result('下午12点开会', new Date(2026, 10, 3, 10, 0)).key).toBe('2026-11-03 12:00');
+    expect(result('明天晚上12点截止', new Date(2026, 10, 3, 10, 0)).key).toBe('2026-11-04 00:00');
   });
 
   it('中文数字与“点半”仍然生效', () => {
-    expect(result('后天下午三点半答辩', new Date(2026, 10, 3, 10, 0)).key).toBe(
-      '2026-11-05 15:30',
-    );
+    expect(result('后天下午三点半答辩', new Date(2026, 10, 3, 10, 0)).key).toBe('2026-11-05 15:30');
   });
 });

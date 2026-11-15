@@ -1,6 +1,7 @@
 import dayjs from 'dayjs';
 import { db } from '../db/database';
 import type { Task } from '../types';
+import { downloadBlob } from './download';
 import { PRIORITY_LABEL, TYPE_LABEL } from './taskDisplay';
 
 /**
@@ -130,21 +131,9 @@ export function buildCalendar(tasks: Task[]): string {
   return lines.map(foldLine).join('\r\n') + '\r\n';
 }
 
-/** 通过 Blob + Object URL 触发浏览器下载，全部在客户端完成 */
+/** 通过公共下载工具输出 .ics（下载与 ObjectURL 回收逻辑见 utils/download.ts） */
 function downloadIcs(filename: string, content: string): void {
-  const blob = new Blob([content], { type: 'text/calendar;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-
-  link.href = url;
-  link.download = filename;
-  link.rel = 'noopener';
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-
-  // 延迟释放，避免部分浏览器还没来得及开始下载
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  downloadBlob(filename, new Blob([content], { type: 'text/calendar;charset=utf-8' }));
 }
 
 /**
@@ -159,9 +148,6 @@ export async function exportTasksToCalendar(): Promise<number> {
     throw new Error('没有可导出的任务');
   }
 
-  downloadIcs(
-    `ddl-日历提醒-${dayjs().format('YYYY-MM-DD-HHmm')}.ics`,
-    buildCalendar(tasks),
-  );
+  downloadIcs(`ddl-日历提醒-${dayjs().format('YYYY-MM-DD-HHmm')}.ics`, buildCalendar(tasks));
   return tasks.length;
 }

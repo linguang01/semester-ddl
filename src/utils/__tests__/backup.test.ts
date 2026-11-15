@@ -92,17 +92,13 @@ describe('parseBackupText', () => {
 
   it('旧备份的非 UUID ID 会重映射，并同步改写每日选择引用', () => {
     const parsed = parseBackupText(
-      buildFile([baseTask], [
-        { date: '2026-11-10', taskIds: ['task-1', 'missing-task'] },
-      ]),
+      buildFile([baseTask], [{ date: '2026-11-10', taskIds: ['task-1', 'missing-task'] }]),
     );
 
     expect(parsed.tasks).toHaveLength(1);
     expect(isTaskId(parsed.tasks[0].id)).toBe(true);
     expect(parsed.tasks[0].id).not.toBe('task-1');
-    expect(parsed.dailySelections).toEqual([
-      { date: '2026-11-10', taskIds: [parsed.tasks[0].id] },
-    ]);
+    expect(parsed.dailySelections).toEqual([{ date: '2026-11-10', taskIds: [parsed.tasks[0].id] }]);
 
     // 同一旧备份重复导入必须得到相同 ID，避免产生重复任务。
     const again = parseBackupText(buildFile([baseTask]));
@@ -111,7 +107,10 @@ describe('parseBackupText', () => {
 
   it('墓碑不进入普通备份，也不会在新设备上复活删除任务', () => {
     const parsed = parseBackupText(
-      buildFile([{ ...baseTask, deleted: true }, { ...baseTask, id: 'task-2' }]),
+      buildFile([
+        { ...baseTask, deleted: true },
+        { ...baseTask, id: 'task-2' },
+      ]),
     );
 
     expect(parsed.tasks).toHaveLength(1);

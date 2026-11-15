@@ -62,7 +62,15 @@ export interface NewTaskInput {
 export type TaskUpdate = Partial<
   Pick<
     Task,
-    'title' | 'type' | 'course' | 'deadline' | 'estimatedHours' | 'actualHours' | 'priority' | 'status' | 'subTasks'
+    | 'title'
+    | 'type'
+    | 'course'
+    | 'deadline'
+    | 'estimatedHours'
+    | 'actualHours'
+    | 'priority'
+    | 'status'
+    | 'subTasks'
   >
 >;
 

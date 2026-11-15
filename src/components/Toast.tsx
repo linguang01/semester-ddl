@@ -28,7 +28,7 @@ export function Toast({ toast, onDismiss }: ToastProps) {
   }, [toast.id, onDismiss]);
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-above-tabbar z-50 flex justify-center px-4">
+    <div className="bottom-above-tabbar pointer-events-none fixed inset-x-0 z-50 flex justify-center px-4">
       <div
         key={toast.id}
         role="status"

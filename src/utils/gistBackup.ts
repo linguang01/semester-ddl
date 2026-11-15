@@ -181,7 +181,10 @@ export async function downloadFromGist(gistId: string, token: string): Promise<P
   }
 
   const data = (await response.json()) as {
-    files?: Record<string, { filename: string; content?: string; truncated?: boolean; raw_url?: string }>;
+    files?: Record<
+      string,
+      { filename: string; content?: string; truncated?: boolean; raw_url?: string }
+    >;
   };
   const file = data.files?.[GIST_FILE_NAME];
   if (!file) {

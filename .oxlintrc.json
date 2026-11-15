@@ -1,0 +1,44 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["react", "typescript", "oxc"],
+  "env": {
+    "browser": true,
+    "es2024": true
+  },
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn",
+    "perf": "warn"
+  },
+  "rules": {
+    "no-unused-vars": [
+      "error",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_",
+        "ignoreRestSiblings": true,
+        "caughtErrors": "none"
+      }
+    ],
+    "typescript/no-floating-promises": "error",
+    "react/rules-of-hooks": "error",
+    "react/exhaustive-deps": "warn",
+    "react/only-export-components": "warn",
+
+    "react/react-in-jsx-scope": "off",
+    "react/exhaustive-effect-dependencies": "off",
+    "react/no-array-index-key": "off",
+    "eslint/no-await-in-loop": "off",
+    "eslint/no-underscore-dangle": "off",
+    "eslint/no-new": "off",
+    "eslint/no-shadow": "off"
+  },
+  "ignorePatterns": [
+    "dist/**",
+    "public/**",
+    "node_modules/**",
+    ".workbuddy/**",
+    ".trae-html-share-packages/**",
+    "ddl-card-demo.html"
+  ]
+}

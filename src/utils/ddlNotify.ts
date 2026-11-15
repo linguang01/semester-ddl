@@ -39,7 +39,11 @@ export function findDueTasks(tasks: Task[], now = Date.now()): Task[] {
 }
 
 /** 通过 Service Worker 弹系统通知；无 SW 时回退到页面内 new Notification */
-export async function showSystemNotification(title: string, body: string, tag: string): Promise<void> {
+export async function showSystemNotification(
+  title: string,
+  body: string,
+  tag: string,
+): Promise<void> {
   // 优先走 SW：应用切后台/最小化时也能弹
   try {
     const reg = await navigator.serviceWorker.getRegistration();
@@ -114,5 +118,9 @@ export function initDdlNotifications(getTasks: () => Task[]): () => void {
 
 /** 开启通知后立即发一条测试通知，让用户确认系统能弹 */
 export async function sendTestNotification(): Promise<void> {
-  await showSystemNotification('通知已开启', '之后有任务距离 DDL 不足 24 小时，会在这里提醒你', 'ddl-test');
+  await showSystemNotification(
+    '通知已开启',
+    '之后有任务距离 DDL 不足 24 小时，会在这里提醒你',
+    'ddl-test',
+  );
 }
