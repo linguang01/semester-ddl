@@ -16,3 +16,7 @@ ddl-card-demo.html
 
 # 文档按人写格式保留（表格、列表换行由作者控制）
 README.md
+
+# GitHub Actions 工作流只在网页端维护：
+# 无 workflow scope 的 OAuth 凭据无法推送该文件，本地格式化反而会让 CI 卡在 format:check
+.github/workflows/
