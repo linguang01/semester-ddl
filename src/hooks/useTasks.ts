@@ -37,6 +37,8 @@ export interface UseTasksResult {
    */
   updateTask: (id: string, patch: TaskUpdate, expectedUpdatedAt?: string) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
+  /** 撤销删除：把墓碑翻回正常任务（提示条上的「撤销」用） */
+  restoreTask: (id: string) => Promise<void>;
   toggleTaskDone: (id: string) => Promise<void>;
   /** 更新子任务并联动任务完成状态（全勾完 → done，取消勾选 → todo） */
   updateSubTasks: (id: string, subTasks: SubTask[]) => Promise<void>;
@@ -202,6 +204,22 @@ export function useTasks(): UseTasksResult {
     if (fresh) queueTaskPush(fresh);
   }, []);
 
+  const restoreTask = useCallback(async (id: string): Promise<void> => {
+    // 撤销删除 = 把墓碑翻回来并刷新 updatedAt，让恢复动作本身也能同步到其他设备
+    await db.transaction('rw', db.tasks, async () => {
+      const updatedCount = await db.tasks.update(id, {
+        deleted: false,
+        updatedAt: new Date().toISOString(),
+      });
+      if (updatedCount === 0) {
+        throw new Error(`任务不存在：${id}`);
+      }
+    });
+
+    const fresh = await db.tasks.get(id);
+    if (fresh) queueTaskPush(fresh);
+  }, []);
+
   const toggleTaskDone = useCallback(async (id: string): Promise<void> => {
     await db.transaction('rw', db.tasks, async () => {
       const task = await db.tasks.get(id);
@@ -253,5 +271,15 @@ export function useTasks(): UseTasksResult {
     if (fresh) queueTaskPush(fresh);
   }, []);
 
-  return { tasks, loading, error, addTask, updateTask, deleteTask, toggleTaskDone, updateSubTasks };
+  return {
+    tasks,
+    loading,
+    error,
+    addTask,
+    updateTask,
+    deleteTask,
+    restoreTask,
+    toggleTaskDone,
+    updateSubTasks,
+  };
 }

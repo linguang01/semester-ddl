@@ -125,7 +125,7 @@ export const AllTasksView = memo(function AllTasksView({
           })}
         </div>
 
-        <p className="px-1 pt-1 text-[11px] text-slate-400 dark:text-slate-500">
+        <p className="px-1 pt-1 text-xs text-slate-500 dark:text-slate-400">
           点事项可编辑或删除；含子任务的事项点开可勾选进度
         </p>
       </section>
@@ -199,18 +199,18 @@ export const AllTasksView = memo(function AllTasksView({
                         {task.title}
                       </span>
                       {isToday && !done && (
-                        <span className="shrink-0 rounded bg-indigo-100 px-1.5 py-0.5 text-[11px] font-medium text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300">
+                        <span className="shrink-0 rounded bg-indigo-100 px-1.5 py-0.5 text-xs font-medium text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300">
                           今日
                         </span>
                       )}
                       {/* 状态徽标：已完成 → 灰色；未完成且过期 → 红色逾期 */}
                       {done ? (
-                        <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-400 dark:bg-slate-800 dark:text-slate-500">
+                        <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-400 dark:bg-slate-800 dark:text-slate-500">
                           已完成
                         </span>
                       ) : (
                         overdue && (
-                          <span className="shrink-0 rounded bg-rose-100 px-1.5 py-0.5 text-[11px] font-medium text-rose-600 dark:bg-rose-500/20 dark:text-rose-400">
+                          <span className="shrink-0 rounded bg-rose-100 px-1.5 py-0.5 text-xs font-medium text-rose-600 dark:bg-rose-500/20 dark:text-rose-400">
                             已逾期
                           </span>
                         )
@@ -218,14 +218,14 @@ export const AllTasksView = memo(function AllTasksView({
                     </span>
 
                     <span
-                      className={`mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] ${
+                      className={`mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs ${
                         done
                           ? 'text-slate-400/70 dark:text-slate-600'
                           : 'text-slate-500 dark:text-slate-400'
                       }`}
                     >
                       <span
-                        className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                        className={`rounded px-1.5 py-0.5 text-xs font-medium ${
                           done
                             ? 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500'
                             : TYPE_STYLE[task.type]
@@ -237,10 +237,10 @@ export const AllTasksView = memo(function AllTasksView({
                     </span>
 
                     <span
-                      className={`mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] ${
+                      className={`mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs ${
                         done
                           ? 'text-slate-300 dark:text-slate-600'
-                          : 'text-slate-400 dark:text-slate-500'
+                          : 'text-slate-500 dark:text-slate-400'
                       }`}
                     >
                       <span

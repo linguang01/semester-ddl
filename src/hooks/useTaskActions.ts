@@ -20,6 +20,7 @@ export interface UseTaskActionsOptions {
   addTask: (input: NewTaskInput) => Promise<Task>;
   updateTask: (id: string, patch: TaskUpdate, expectedUpdatedAt?: string) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
+  restoreTask: (id: string) => Promise<void>;
   toggleTaskDone: (id: string) => Promise<void>;
   updateSubTasks: (id: string, subTasks: SubTask[]) => Promise<void>;
   notify: Notify;
@@ -60,6 +61,7 @@ export function useTaskActions(options: UseTaskActionsOptions): TaskActions {
     addTask,
     updateTask,
     deleteTask,
+    restoreTask,
     toggleTaskDone,
     updateSubTasks,
     notify,
@@ -93,9 +95,18 @@ export function useTaskActions(options: UseTaskActionsOptions): TaskActions {
   const handleDelete = useCallback(
     async (task: Task) => {
       await deleteTask(task.id);
-      notify('已删除事项', 'success');
+      // 删除是软删除，撤销就是翻回墓碑：手滑了不用重新录一遍
+      notify('已删除事项', 'success', {
+        label: '撤销',
+        onClick: () => {
+          void restoreTask(task.id).then(
+            () => notify('已恢复', 'success'),
+            (cause: unknown) => notify(describeError(cause), 'error'),
+          );
+        },
+      });
     },
-    [deleteTask, notify],
+    [deleteTask, notify, restoreTask],
   );
 
   const handleToggle = useCallback(
@@ -150,13 +161,26 @@ export function useTaskActions(options: UseTaskActionsOptions): TaskActions {
   const handleRemoveFromToday = useCallback(
     async (task: Task) => {
       if (dailyLoading) return;
+
+      // 撤销要恢复的是「移出前那一刻的三个名额」，而不是简单地把它加回去：
+      // 期间名额可能已被别的任务占满，用快照整体覆盖才不会被上限拦住。
+      const snapshot = activeSelectionIds;
+
       try {
         await removeFromSelection(today, task.id);
+        notify('已移出今日', 'info', {
+          label: '撤销',
+          onClick: () => {
+            void replaceSelection(today, snapshot).catch((cause: unknown) =>
+              notify(describeError(cause), 'error'),
+            );
+          },
+        });
       } catch (cause) {
         notify(describeError(cause), 'error');
       }
     },
-    [dailyLoading, notify, removeFromSelection, today],
+    [activeSelectionIds, dailyLoading, notify, removeFromSelection, replaceSelection, today],
   );
 
   const handleAutoSelect = useCallback(() => {

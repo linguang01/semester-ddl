@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dayjs from 'dayjs';
 import { AllTasksView } from './components/AllTasksView';
 import { BottomNav, type TabKey } from './components/BottomNav';
@@ -21,6 +21,7 @@ import { useTasks } from './hooks/useTasks';
 import { useTheme } from './hooks/useTheme';
 import { useAuth } from './hooks/useAuth';
 import { todayKey } from './utils/date';
+import { recentCourseOptions } from './utils/courseOptions';
 import { describeError } from './utils/error';
 import {
   playFocusCompleteSound,
@@ -69,8 +70,20 @@ export default function App() {
   // 让「今日三件事」「日历」自动切到新的今天（否则会一直停留在打开时的日期）
   const [today, setToday] = useState(todayKey);
 
-  const { tasks, loading, error, addTask, updateTask, deleteTask, toggleTaskDone, updateSubTasks } =
-    useTasks();
+  const {
+    tasks,
+    loading,
+    error,
+    addTask,
+    updateTask,
+    deleteTask,
+    restoreTask,
+    toggleTaskDone,
+    updateSubTasks,
+  } = useTasks();
+
+  // 历史课程名：点一下就能填，省掉每次手敲「高等数学」
+  const courseOptions = useMemo(() => recentCourseOptions(tasks), [tasks]);
 
   const {
     taskIds,
@@ -103,8 +116,9 @@ export default function App() {
     onConfirm: () => void;
   } | null>(null);
 
-  const notify: Notify = useCallback((message, tone = 'info') => {
-    setToast({ id: Date.now(), message, tone });
+  // action 用于「撤销」：Toast 会延长展示时间并在右侧给一个可点按钮
+  const notify: Notify = useCallback((message, tone = 'info', action) => {
+    setToast({ id: Date.now(), message, tone, action });
   }, []);
 
   const dismissToast = useCallback(() => setToast(null), []);
@@ -131,6 +145,7 @@ export default function App() {
     addTask,
     updateTask,
     deleteTask,
+    restoreTask,
     toggleTaskDone,
     updateSubTasks,
     notify,
@@ -293,6 +308,7 @@ export default function App() {
               taskIds={taskIds}
               onAdd={actions.handleAddToToday}
               onRemove={actions.handleRemoveFromToday}
+              onToggle={actions.handleToggle}
               onAutoSelect={actions.handleAutoSelect}
               onStartFocus={handleStartFocus}
               onOpenSubtasks={openSubtasks}
@@ -310,6 +326,7 @@ export default function App() {
           onCreate={actions.handleCreate}
           onUpdate={actions.handleUpdate}
           onDelete={actions.handleDelete}
+          courseOptions={courseOptions}
           notify={notify}
         />
       )}

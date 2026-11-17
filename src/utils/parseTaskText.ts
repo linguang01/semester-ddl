@@ -192,7 +192,10 @@ export function parseTaskText(input: string, now: Date = new Date()): TaskTextPa
 
   if (!courseValue) {
     const suffix = title.match(/^(.{2,8}?)(作业|考试|实验|报告|论文|习题|测验|练习|复习|设计)$/);
-    if (suffix && !/[交做写复习准备完成提交考]/.test(suffix[1])) {
+    // 前缀本身已经是通用词（「实验报告」的前缀是「实验」）时不要硬拆成课程名，
+    // 否则每条「实验报告」都会带一个叫「实验」的假课程
+    const genericPrefix = /(作业|考试|实验|报告|论文|习题|测验|练习|复习|设计)$/;
+    if (suffix && !genericPrefix.test(suffix[1]) && !/[交做写复习准备完成提交考]/.test(suffix[1])) {
       courseValue = suffix[1];
     }
   }

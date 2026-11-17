@@ -12,7 +12,7 @@ import {
   isTaskDone,
   subTaskProgress,
 } from '../utils/taskDisplay';
-import { PlayIcon, StarIcon, WandIcon, XIcon } from './icons';
+import { CheckIcon, PlayIcon, StarIcon, WandIcon, XIcon } from './icons';
 import { DdlProgressBar } from './DdlProgressBar';
 import { SubTaskRing } from './SubTaskRing';
 
@@ -23,6 +23,8 @@ interface TodayViewProps {
   taskIds: string[];
   onAdd: (task: Task) => void;
   onRemove: (task: Task) => void;
+  /** 勾选完成 / 取消完成：最常用的动作，不该逼用户切到「全部」页去做 */
+  onToggle: (task: Task) => void;
   /** 一键生成今日三件事 */
   onAutoSelect: () => void;
   /** 开始专注某个任务 */
@@ -46,6 +48,7 @@ export const TodayView = memo(function TodayView({
   taskIds,
   onAdd,
   onRemove,
+  onToggle,
   onAutoSelect,
   onStartFocus,
   onOpenSubtasks,
@@ -106,7 +109,7 @@ export const TodayView = memo(function TodayView({
                 <WandIcon className="h-4 w-4" />
               </button>
             </div>
-            <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
+            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
               {dayjs(date).format('M月D日 ddd')} · 只挑最重要的 {MAX_DAILY_TASKS} 件
             </p>
           </div>
@@ -128,7 +131,7 @@ export const TodayView = memo(function TodayView({
             return (
               <li
                 key={index}
-                className={`flex min-h-[56px] items-center gap-3 rounded-xl border px-3 py-2 transition-opacity ${
+                className={`flex min-h-[56px] items-center gap-2 rounded-xl border px-3 py-2 transition-opacity ${
                   task
                     ? isTaskDone(task)
                       ? 'border-slate-200 bg-slate-50 opacity-50 hover:opacity-90 dark:border-slate-800 dark:bg-slate-900/60'
@@ -136,9 +139,31 @@ export const TodayView = memo(function TodayView({
                     : 'border-dashed border-slate-200 bg-white dark:border-slate-800 dark:bg-transparent'
                 }`}
               >
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-slate-400 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-500 dark:ring-slate-700">
-                  {index + 1}
-                </span>
+                {task ? (
+                  /* 有任务时，序号位置让给勾选框：完成是这里最高频的动作 */
+                  <button
+                    type="button"
+                    role="checkbox"
+                    aria-checked={isTaskDone(task)}
+                    aria-label={`${isTaskDone(task) ? '恢复待办' : '标记完成'}：${task.title}`}
+                    onClick={() => onToggle(task)}
+                    className="-ml-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition active:scale-95"
+                  >
+                    <span
+                      className={`flex h-[22px] w-[22px] items-center justify-center rounded-md border-2 transition ${
+                        isTaskDone(task)
+                          ? 'border-emerald-500 bg-emerald-500'
+                          : 'border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-900'
+                      }`}
+                    >
+                      {isTaskDone(task) && <CheckIcon className="h-3.5 w-3.5 text-white" />}
+                    </span>
+                  </button>
+                ) : (
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white text-xs font-semibold text-slate-400 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-500 dark:ring-slate-700">
+                    {index + 1}
+                  </span>
+                )}
 
                 {task ? (
                   <>
@@ -153,7 +178,7 @@ export const TodayView = memo(function TodayView({
                       >
                         {task.title}
                       </p>
-                      <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-slate-400 dark:text-slate-500">
+                      <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400">
                         <span
                           className={`h-1.5 w-1.5 shrink-0 rounded-full ${
                             isTaskDone(task)
@@ -164,7 +189,7 @@ export const TodayView = memo(function TodayView({
                         <span>{formatDeadline(task.deadline)}</span>
                         {isTaskDone(task) && (
                           /* 已完成：统一灰色，不再与红色逾期文案抢注意力 */
-                          <span className="text-slate-400 dark:text-slate-500">已完成</span>
+                          <span className="text-slate-500 dark:text-slate-400">已完成</span>
                         )}
                       </p>
                       <DdlProgressBar task={task} now={now} />
@@ -203,7 +228,7 @@ export const TodayView = memo(function TodayView({
                     </div>
                   </>
                 ) : (
-                  <p className="min-w-0 flex-1 text-xs text-slate-400 dark:text-slate-500">
+                  <p className="min-w-0 flex-1 text-xs text-slate-500 dark:text-slate-400">
                     还没选，从下面挑一件
                   </p>
                 )}
@@ -223,14 +248,14 @@ export const TodayView = memo(function TodayView({
             <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">
               今天的 {MAX_DAILY_TASKS} 件都做完了
             </p>
-            <p className="mt-0.5 text-[11px] text-emerald-600/80 dark:text-emerald-400/80">
+            <p className="mt-0.5 text-xs text-emerald-600/80 dark:text-emerald-400/80">
               剩下的时间留给自己，别再往里塞新的了
             </p>
           </div>
         )}
 
         {full && !allDone && (
-          <p className="mt-3 text-center text-[11px] text-amber-600 dark:text-amber-400">
+          <p className="mt-3 text-center text-xs text-amber-600 dark:text-amber-400">
             今日三件事最多选 3 个，做完再加
           </p>
         )}
@@ -239,19 +264,19 @@ export const TodayView = memo(function TodayView({
       <section>
         <div className="mb-2 flex items-end justify-between px-1">
           <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">待办候选</h3>
-          <span className="text-[11px] text-slate-400 dark:text-slate-500">
+          <span className="text-xs text-slate-500 dark:text-slate-400">
             {sortedCandidates.length} 件
           </span>
         </div>
 
         {isSpecialDay && (
-          <p className="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+          <p className="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
             今天有 {todayDdlCount} 件 DDL 需在今天内完成，已用星标置顶。
           </p>
         )}
 
         {full && !allDone && sortedCandidates.length > 0 && (
-          <p className="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+          <p className="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
             名额已满：做完一件再选下一件。
           </p>
         )}
@@ -286,9 +311,9 @@ export const TodayView = memo(function TodayView({
                       )}
                       <span className="truncate">{task.title}</span>
                     </p>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-400 dark:text-slate-500">
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
                       <span
-                        className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${TYPE_STYLE[task.type]}`}
+                        className={`rounded px-1.5 py-0.5 text-xs font-medium ${TYPE_STYLE[task.type]}`}
                       >
                         {TYPE_LABEL[task.type]}
                       </span>
